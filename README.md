@@ -1,4 +1,4 @@
-# PostureGuard
+# SpineSpy
 
 AI-powered posture & focus monitor that runs in your macOS menubar. Takes periodic snapshots to detect bad posture and phone distractions without keeping your camera always on.
 
