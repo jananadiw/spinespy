@@ -1,13 +1,16 @@
 # PostureGuard 🧘‍♂️
 
-AI-powered posture & focus monitor that uses your webcam to detect bad posture and phone distractions. Get reminded by Gandalf or Yoda when you've been slouching for too long!
+AI-powered posture & focus monitor that runs in your macOS menubar. Takes periodic snapshots to detect bad posture and phone distractions without keeping your camera always on.
 
 ## Features
 
+- **Menubar App** - Lightweight icon that shows your posture status (🟢/🔴)
+- **Periodic Snapshots** - Camera opens briefly every N minutes, then closes
 - **Posture Detection** - Detects slouching forward and side tilting using MediaPipe Pose
 - **Phone Detection** - Spots your phone using YOLOv8 object detection
-- **Timed Alerts** - Only alerts after 1 minute of sustained bad behavior (no false alarms!)
-- **Fun Reminders** - Random Gandalf/Yoda voice clips to correct you
+- **Smart Alerts** - Only alerts after 5 consecutive bad snapshots (no false alarms!)
+- **Configurable Interval** - Choose check frequency: 30s, 1min, 2min, or 5min
+- **Pause/Resume** - Easily pause monitoring from the menu
 
 ## Setup
 
@@ -24,56 +27,42 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Add Sound Files
-
-Add your favorite Gandalf/Yoda MP3 or WAV clips to the `sounds/` folder:
-
-```
-sounds/
-├── gandalf_shall_not_pass.mp3
-├── yoda_do_or_do_not.mp3
-└── ...
-```
-
-**Where to find clips:** Search YouTube for "Gandalf you shall not pass" or "Yoda quotes" and use a YouTube to MP3 converter, or find sound effect sites.
-
 ## Usage
 
 ```bash
-python main.py
+python menubar_app.py
 ```
 
-- Sit in front of your webcam
-- The app shows your pose landmarks and status
-- Slouch or grab your phone for 1+ minute → hear a reminder!
-- Press **'q'** to quit
-
-## Configuration
-
-Edit these values in `main.py`:
-
-```python
-ALERT_THRESHOLD = 60   # seconds before alert (default: 1 min)
-ALERT_COOLDOWN = 30    # seconds between alerts
-SLOUCH_THRESHOLD = 0.1 # forward lean sensitivity
-TILT_THRESHOLD = 0.05  # side tilt sensitivity
-```
+The app appears as a 🟢 icon in your menubar. Right-click to:
+- **✓ Monitoring** - Pause/resume monitoring
+- **Interval** - Change snapshot frequency
+- **Quit** - Exit the app
 
 ## How It Works
 
-1. **MediaPipe Pose** tracks 33 body landmarks from your webcam
-2. Compares nose position vs shoulders to detect forward slouch
-3. Compares left/right shoulder heights to detect side tilt
-4. **YOLOv8** runs object detection to find phones in frame
-5. Timers track how long issues persist
-6. After 60 seconds → plays random sound from `sounds/` folder
+1. Every N minutes, the app briefly opens your camera and takes a snapshot
+2. **MediaPipe Pose** analyzes the image for slouching or tilting
+3. **YOLOv8** checks for phones in the frame
+4. Camera closes immediately after analysis
+5. Menubar icon updates: 🟢 (good) or 🔴 (bad posture)
+6. After 5 consecutive bad snapshots → plays alert sound
+
+## Configuration
+
+Edit these values in `menubar_app.py`:
+
+```python
+SLOUCH_THRESHOLD = 0.1   # forward lean sensitivity
+TILT_THRESHOLD = 0.05    # side tilt sensitivity
+BAD_STREAK_LIMIT = 5     # bad snapshots before alert
+```
 
 ## Tech Stack
 
-- OpenCV - Webcam capture
+- OpenCV - Snapshot capture
 - MediaPipe - Pose estimation
 - YOLOv8 (Ultralytics) - Object detection
-- playsound - Audio playback
+- rumps - macOS menubar app
 
 ## License
 
