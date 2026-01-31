@@ -10,7 +10,6 @@ venv/
 .ruff_cache/
 .coverage
 htmlcov/
-tests/
 conftest.py
 
 # IDE
