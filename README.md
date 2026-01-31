@@ -26,7 +26,7 @@ git clone https://github.com/jananadiw/spinespy.git
 cd spinespy
 
 # Create virtual environment
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
@@ -36,7 +36,16 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
+# Option 1: Using the run script
+./run.sh
+
+# Option 2: Manual activation
+source venv/bin/activate
 python menubar_app.py
+
+# Option 3: With Poetry (if you prefer)
+poetry install
+poetry run python menubar_app.py
 ```
 
 The app appears as a 🦸 icon in your menubar. Right-click to:

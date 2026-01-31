@@ -45,13 +45,13 @@ class TestCheckPosture:
         assert reason == "Tilting"
 
     def test_slouch_threshold_boundary(self):
-        # Exactly at threshold should not trigger
+        # Exactly at threshold should trigger
         landmarks = make_landmarks(nose_z=0, shoulder_z=SLOUCH_THRESHOLD)
         is_bad, _ = check_posture(landmarks)
-        assert is_bad is False
+        assert is_bad is True
 
     def test_tilt_threshold_boundary(self):
-        # Exactly at threshold should not trigger
+        # Exactly at threshold should trigger
         landmarks = make_landmarks(left_y=0.5, right_y=0.5 + TILT_THRESHOLD)
         is_bad, _ = check_posture(landmarks)
-        assert is_bad is False
+        assert is_bad is True

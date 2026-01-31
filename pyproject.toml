@@ -2,7 +2,7 @@
 name = "spinespy"
 version = "0.1.0"
 description = "AI-powered posture & focus monitor for macOS menubar"
-authors = "jananadiw"
+authors = ["jananadiw"]
 readme = "README.md"
 license = "MIT"
 
@@ -12,6 +12,11 @@ opencv-python = "^4.8.0"
 mediapipe = "^0.10.0"
 ultralytics = "^8.0.0"
 rumps = "^0.4.0"
+
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
 
 [build-system]
 requires = ["poetry-core"]

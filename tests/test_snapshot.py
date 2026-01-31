@@ -8,8 +8,8 @@ import numpy as np
 class TestTakeSnapshot:
     @patch("menubar_app.cv2.VideoCapture")
     @patch("menubar_app.detect_phone")
-    @patch("menubar_app.pose")
-    def test_good_posture_no_phone(self, mock_pose, mock_detect_phone, mock_cap_class):
+    @patch("menubar_app.pose_detector")
+    def test_good_posture_no_phone(self, mock_pose_detector, mock_detect_phone, mock_cap_class):
         from menubar_app import take_snapshot
 
         # Mock camera
@@ -19,7 +19,7 @@ class TestTakeSnapshot:
         mock_cap_class.return_value = mock_cap
 
         # Mock pose - no landmarks detected
-        mock_pose.process.return_value = MagicMock(pose_landmarks=None)
+        mock_pose_detector.detect.return_value = MagicMock(pose_landmarks=None)
         mock_detect_phone.return_value = False
 
         is_bad, reason = take_snapshot()
@@ -29,8 +29,8 @@ class TestTakeSnapshot:
 
     @patch("menubar_app.cv2.VideoCapture")
     @patch("menubar_app.detect_phone")
-    @patch("menubar_app.pose")
-    def test_phone_detected(self, mock_pose, mock_detect_phone, mock_cap_class):
+    @patch("menubar_app.pose_detector")
+    def test_phone_detected(self, mock_pose_detector, mock_detect_phone, mock_cap_class):
         from menubar_app import take_snapshot
 
         mock_cap = MagicMock()
@@ -38,7 +38,7 @@ class TestTakeSnapshot:
         mock_cap.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
         mock_cap_class.return_value = mock_cap
 
-        mock_pose.process.return_value = MagicMock(pose_landmarks=None)
+        mock_pose_detector.detect.return_value = MagicMock(pose_landmarks=None)
         mock_detect_phone.return_value = True
 
         is_bad, reason = take_snapshot()

@@ -48,9 +48,9 @@ def check_posture(landmarks):
 
     print(f"  [DEBUG] forward_lean={forward_lean:.3f} (threshold={SLOUCH_THRESHOLD}), tilt={tilt:.3f} (threshold={TILT_THRESHOLD})")
 
-    if forward_lean > SLOUCH_THRESHOLD:
+    if forward_lean >= SLOUCH_THRESHOLD:
         return True, "Slouching"
-    if tilt > TILT_THRESHOLD:
+    if tilt >= TILT_THRESHOLD:
         return True, "Tilting"
     return False, None
 
@@ -110,7 +110,7 @@ def take_snapshot(save_debug=False):
 def play_alert():
     """Play system alert sound."""
     threading.Thread(
-        target=lambda: os.system("afplay /System/Library/Sounds/Sosumi.aiff"),
+        target=lambda: os.system("afplay /System/Library/Sounds/Bong.aiff"),
         daemon=True,
     ).start()
 
