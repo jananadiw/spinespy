@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Download models
+        run: |
+          curl -L -o pose_landmarker.task "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+          curl -L -o yolov8n.pt "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt"
+
+      - name: Build DMG
+        run: |
+          pyinstaller --name SpineSpy \
+            --windowed \
+            --noconfirm \
+            --add-data "pose_landmarker.task:." \
+            --add-data "yolov8n.pt:." \
+            --hidden-import rumps \
+            --hidden-import cv2 \
+            --hidden-import mediapipe \
+            --hidden-import ultralytics \
+            --hidden-import mediapipe.tasks.c \
+            --collect-all mediapipe \
+            --osx-bundle-identifier com.jananadiw.spinespy \
+            menubar_app.py
+          /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" dist/SpineSpy.app/Contents/Info.plist 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'SpineSpy needs camera access to monitor your posture.'" dist/SpineSpy.app/Contents/Info.plist 2>/dev/null || true
+          mkdir -p dist/dmg
+          cp -r dist/SpineSpy.app dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname "SpineSpy" -srcfolder dist/dmg -ov -format UDZO SpineSpy.dmg
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: SpineSpy.dmg
+          generate_release_notes: true
