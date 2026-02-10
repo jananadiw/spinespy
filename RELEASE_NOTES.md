@@ -1,16 +1,21 @@
-# SpineSpy v1.0.0
+# SpineSpy v1.1.0
 
-AI-powered posture & focus monitor for your macOS menubar.
+Improved detection accuracy and camera-angle independence.
 
-## Features
+## What's New
 
-- 🦸 **Menubar app** - Shows posture status (🦸 good / 🧟 bad)
-- 📸 **Periodic snapshots** - Camera opens briefly, then closes (not always-on)
-- 🧘 **Posture detection** - Detects slouching and side tilting via MediaPipe
-- 📱 **Phone detection** - Spots phone distractions using YOLOv8
-- 🔔 **Smart alerts** - Only alerts after 5 consecutive bad snapshots
-- ⏱️ **Configurable intervals** - 30s, 1min, 2min, or 5min
-- ⏸️ **Pause/Resume** - Easy control from the menu
+- 🎯 **YOLO26s upgrade** - Upgraded phone detection model from YOLOv8n to YOLO26s (mAP 37.3 → 48.6), significantly improving small object detection accuracy
+- 📐 **Posture calibration** - New calibration system captures your good-posture baseline so detection works regardless of camera angle
+- 🔄 **Auto-calibrate on startup** - App automatically calibrates when launched
+- 🎛️ **Calibrate menu item** - Re-calibrate anytime from the menubar menu with notification feedback
+
+## Upgrading
+
+```bash
+pip install -r requirements.txt
+```
+
+The app will auto-download the new `yolo26s.pt` model (~19MB) on first launch.
 
 ## Installation
 
