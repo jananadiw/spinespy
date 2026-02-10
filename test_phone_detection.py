@@ -6,7 +6,7 @@ from ultralytics import YOLO
 import time
 
 print("Loading YOLO model...")
-yolo = YOLO("yolov8n.pt")
+yolo = YOLO("yolo26s.pt")
 PHONE_CLASS_ID = 67
 
 print("Opening camera...")

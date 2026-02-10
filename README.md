@@ -2,7 +2,7 @@
 [![Python](https://img.shields.io/github/languages/top/jananadiw/spinespy)](https://www.python.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.x-green.svg)](https://pypi.org/project/opencv-python/)
 [![MediaPipe](https://img.shields.io/badge/MediaPipe-latest-orange.svg)](https://pypi.org/project/mediapipe/)
-[![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-purple.svg)](https://pypi.org/project/ultralytics/)
+[![YOLO26s](https://img.shields.io/badge/YOLO26s-Ultralytics-purple.svg)](https://pypi.org/project/ultralytics/)
 [![rumps](https://img.shields.io/badge/rumps-latest-red.svg)](https://pypi.org/project/rumps/)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 
@@ -13,7 +13,7 @@
 - **Menubar App** - Lightweight icon that shows your posture status (🦸 good posture / 🧟 bad posture)
 - **Periodic Snapshots** - Camera opens briefly every N minutes, then closes
 - **Posture Detection** - Detects slouching forward and side tilting using MediaPipe Pose
-- **Phone Detection** - Spots your phone using YOLOv8 object detection
+- **Phone Detection** - Spots your phone using YOLO26s object detection
 - **Smart Alerts** - Only alerts after 5 consecutive bad snapshots (no false alarms!)
 - **Configurable Interval** - Choose check frequency: 30s, 1min, 2min, or 5min
 - **Pause/Resume** - Easily pause monitoring from the menu
@@ -57,7 +57,7 @@ The app appears as a 🦸 icon in your menubar. Right-click to:
 
 1. Every N minutes, the app briefly opens your camera and takes a snapshot
 2. **MediaPipe Pose** analyzes the image for slouching or tilting
-3. **YOLOv8** checks for phones in the frame
+3. **YOLO26s** checks for phones in the frame
 4. Camera closes immediately after analysis
 5. Menubar icon updates: 🦸 (good) or 🧟 (bad posture)
 6. After 5 consecutive bad snapshots → plays alert sound
@@ -76,7 +76,7 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 
 - **[OpenCV](https://opencv.org/)** - Camera snapshot capture
 - **[MediaPipe](https://google.github.io/mediapipe/)** - Real-time pose estimation
-- **[YOLOv8](https://github.com/ultralytics/ultralytics)** (Ultralytics) - Object detection for phone spotting
+- **[YOLO26s](https://github.com/ultralytics/ultralytics)** (Ultralytics) - Object detection for phone spotting
 - **[rumps](https://github.com/jaredks/rumps)** - macOS menubar application framework
 
 ## Requirements
@@ -102,7 +102,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - MediaPipe for their excellent pose detection framework
-- Ultralytics for YOLOv8
+- Ultralytics for YOLO26s
 - The rumps library for making macOS menubar apps easy
 
 ---

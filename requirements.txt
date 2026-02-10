@@ -1,4 +1,4 @@
 opencv-python>=4.8.0
 mediapipe>=0.10.0
-ultralytics>=8.0.0
+ultralytics>=8.4.0
 rumps>=0.4.0
