@@ -9,6 +9,8 @@ import sys
 import time
 import threading
 import urllib.request
+import statistics
+from collections import Counter
 
 
 def resource_path(relative_path):
@@ -27,9 +29,15 @@ SLOUCH_THRESHOLD = 0.1
 TILT_THRESHOLD = 0.05
 BAD_STREAK_LIMIT = 5
 
+# Calibration config
+CALIBRATION_FRAMES = 10
+CALIBRATION_INTERVAL = 0.3
+
 # Calibration baseline (set via calibrate())
 baseline_lean = 0.0
 baseline_tilt = 0.0
+effective_slouch_threshold = SLOUCH_THRESHOLD
+effective_tilt_threshold = TILT_THRESHOLD
 
 # Download pose model if needed
 MODEL_PATH = resource_path("pose_landmarker.task")
@@ -62,8 +70,8 @@ def get_posture_metrics(landmarks):
 
 
 def calibrate():
-    """Capture current posture as the baseline."""
-    global baseline_lean, baseline_tilt
+    """Capture multiple frames and compute a robust baseline from median metrics."""
+    global baseline_lean, baseline_tilt, effective_slouch_threshold, effective_tilt_threshold
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("Calibration failed: camera error")
@@ -73,26 +81,48 @@ def calibrate():
     for _ in range(5):
         cap.read()
 
-    ret, frame = cap.read()
+    leans = []
+    tilts = []
+    for _ in range(CALIBRATION_FRAMES):
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        frame = cv2.flip(frame, 1)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        results = pose_detector.detect(mp_image)
+        if results.pose_landmarks and len(results.pose_landmarks) > 0:
+            lean, tilt = get_posture_metrics(results.pose_landmarks[0])
+            leans.append(lean)
+            tilts.append(tilt)
+        time.sleep(CALIBRATION_INTERVAL)
+
     cap.release()
-    if not ret:
-        print("Calibration failed: capture error")
+
+    if len(leans) < CALIBRATION_FRAMES // 2:
+        print(f"Calibration failed: only {len(leans)} valid frames (need {CALIBRATION_FRAMES // 2})")
         return False
 
-    frame = cv2.flip(frame, 1)
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-    results = pose_detector.detect(mp_image)
+    baseline_lean = statistics.median(leans)
+    baseline_tilt = statistics.median(tilts)
 
-    if results.pose_landmarks and len(results.pose_landmarks) > 0:
-        lean, tilt = get_posture_metrics(results.pose_landmarks[0])
-        baseline_lean = lean
-        baseline_tilt = tilt
-        print(f"✓ Calibrated: baseline_lean={baseline_lean:.3f}, baseline_tilt={baseline_tilt:.3f}")
-        return True
+    lean_std = statistics.stdev(leans) if len(leans) > 1 else 0.0
+    tilt_std = statistics.stdev(tilts) if len(tilts) > 1 else 0.0
+    effective_slouch_threshold = max(SLOUCH_THRESHOLD, lean_std * 3)
+    effective_tilt_threshold = max(TILT_THRESHOLD, tilt_std * 3)
 
-    print("Calibration failed: no pose detected")
-    return False
+    print(f"✓ Calibrated from {len(leans)} frames: baseline_lean={baseline_lean:.3f}, baseline_tilt={baseline_tilt:.3f}")
+    print(f"  Adaptive thresholds: slouch={effective_slouch_threshold:.3f}, tilt={effective_tilt_threshold:.3f}")
+    return True
+
+
+def _severity_label(delta, threshold):
+    ratio = delta / threshold if threshold > 0 else 0
+    if ratio < 1.5:
+        return "mild"
+    if ratio < 2.5:
+        return "moderate"
+    return "severe"
 
 
 def check_posture(landmarks):
@@ -101,12 +131,14 @@ def check_posture(landmarks):
     lean_delta = forward_lean - baseline_lean
     tilt_delta = tilt - baseline_tilt
 
-    print(f"  [DEBUG] lean_delta={lean_delta:.3f} (threshold={SLOUCH_THRESHOLD}), tilt_delta={tilt_delta:.3f} (threshold={TILT_THRESHOLD})")
+    print(f"  [DEBUG] lean_delta={lean_delta:.3f} (threshold={effective_slouch_threshold:.3f}), tilt_delta={tilt_delta:.3f} (threshold={effective_tilt_threshold:.3f})")
 
-    if lean_delta >= SLOUCH_THRESHOLD:
-        return True, "Slouching"
-    if tilt_delta >= TILT_THRESHOLD:
-        return True, "Tilting"
+    if lean_delta >= effective_slouch_threshold:
+        severity = _severity_label(lean_delta, effective_slouch_threshold)
+        return True, f"Slouching ({severity})"
+    if tilt_delta >= effective_tilt_threshold:
+        severity = _severity_label(tilt_delta, effective_tilt_threshold)
+        return True, f"Tilting ({severity})"
     return False, None
 
 
@@ -125,8 +157,11 @@ def detect_phone(frame):
     return False
 
 
+SNAPSHOT_FRAMES = 3
+
+
 def take_snapshot(save_debug=False):
-    """Capture single frame, analyze, return result."""
+    """Capture multiple frames, analyze with majority voting, return result."""
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         return None, "Camera error"
@@ -135,30 +170,43 @@ def take_snapshot(save_debug=False):
     for _ in range(5):
         cap.read()
 
-    ret, frame = cap.read()
+    frames = []
+    for _ in range(SNAPSHOT_FRAMES):
+        ret, frame = cap.read()
+        if ret:
+            frames.append(cv2.flip(frame, 1))
     cap.release()
 
-    if not ret:
+    if not frames:
         return None, "Capture failed"
 
-    frame = cv2.flip(frame, 1)
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
     if save_debug:
-        cv2.imwrite("debug_snapshot.jpg", frame)
+        cv2.imwrite("debug_snapshot.jpg", frames[-1])
         print("Saved debug_snapshot.jpg")
 
-    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-    pose_results = pose_detector.detect(mp_image)
+    bad_votes = []
+    reasons = []
+    for frame in frames:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        pose_results = pose_detector.detect(mp_image)
 
-    print(f"[DEBUG] Pose detected: {len(pose_results.pose_landmarks) if pose_results.pose_landmarks else 0} people")
+        if pose_results.pose_landmarks and len(pose_results.pose_landmarks) > 0:
+            posture_bad, reason = check_posture(pose_results.pose_landmarks[0])
+            bad_votes.append(posture_bad)
+            if posture_bad:
+                reasons.append(reason)
+        else:
+            bad_votes.append(False)
 
-    if pose_results.pose_landmarks and len(pose_results.pose_landmarks) > 0:
-        posture_bad, reason = check_posture(pose_results.pose_landmarks[0])
-        if posture_bad:
-            return True, reason
+    bad_count = sum(bad_votes)
+    print(f"[DEBUG] Posture votes: {bad_count}/{len(bad_votes)} bad")
 
-    phone_found = detect_phone(frame)
+    if bad_count >= len(bad_votes) / 2 and reasons:
+        dominant_reason = Counter(reasons).most_common(1)[0][0]
+        return True, dominant_reason
+
+    phone_found = detect_phone(frames[-1])
     print(f"[DEBUG] Phone detected: {phone_found}")
 
     if phone_found:
@@ -179,8 +227,10 @@ class PostureGuardApp(rumps.App):
     def __init__(self):
         super().__init__(ICON_GOOD, quit_button=None)
         self.bad_streak = 0
+        self.bad_reasons = []
         self.interval = 60
         self.paused = False
+        self.calibrating = False
 
         self.monitoring_item = rumps.MenuItem("✓ Monitoring", callback=self.toggle_monitoring)
 
@@ -203,20 +253,41 @@ class PostureGuardApp(rumps.App):
         self.timer = rumps.Timer(self.check_posture, self.interval)
         self.timer.start()
 
-        # Auto-calibrate on startup
-        threading.Thread(target=calibrate, daemon=True).start()
+        threading.Thread(target=self._startup_calibration, daemon=True).start()
+
+    def _startup_calibration(self):
+        rumps.notification("SpineSpy", "Starting up", "Sit with good posture. Auto-calibrating in 3 seconds...")
+        time.sleep(3)
+        self.calibrating = True
+        self.title = "📐"
+        try:
+            if calibrate():
+                rumps.notification("SpineSpy", "Calibration complete", "Your good posture baseline has been captured.")
+            else:
+                rumps.notification("SpineSpy", "Calibration failed", "Could not detect your pose. Make sure you're visible and well-lit.")
+        finally:
+            self.calibrating = False
+            self.title = ICON_GOOD
 
     def run_calibration(self, _):
         threading.Thread(target=self._calibrate_with_feedback, daemon=True).start()
 
     def _calibrate_with_feedback(self):
-        if calibrate():
-            rumps.notification("SpineSpy", "Calibration complete", "Your good posture has been saved as baseline.")
-        else:
-            rumps.notification("SpineSpy", "Calibration failed", "Make sure you're visible to the camera.")
+        rumps.notification("SpineSpy", "Calibration starting", "Sit in your best posture. Calibration begins in 3 seconds...")
+        time.sleep(3)
+        self.calibrating = True
+        self.title = "📐"
+        try:
+            if calibrate():
+                rumps.notification("SpineSpy", "Calibration complete", "Your good posture baseline has been captured.")
+            else:
+                rumps.notification("SpineSpy", "Calibration failed", "Could not detect your pose in enough frames. Make sure you're visible and well-lit.")
+        finally:
+            self.calibrating = False
+            self.title = ICON_GOOD
 
     def check_posture(self, _):
-        if self.paused:
+        if self.paused or self.calibrating:
             return
 
         is_bad, reason = take_snapshot()
@@ -227,14 +298,24 @@ class PostureGuardApp(rumps.App):
 
         if is_bad:
             self.bad_streak += 1
+            self.bad_reasons.append(reason)
             self.title = ICON_BAD
             print(f"Bad: {reason} (streak: {self.bad_streak}/{BAD_STREAK_LIMIT})")
 
             if self.bad_streak >= BAD_STREAK_LIMIT:
+                reason_counts = Counter(self.bad_reasons)
+                dominant, count = reason_counts.most_common(1)[0]
+                rumps.notification(
+                    "SpineSpy",
+                    "Posture Alert",
+                    f"{dominant} detected {count}/{self.bad_streak} checks. Sit up straight!",
+                )
                 play_alert()
                 self.bad_streak = 0
+                self.bad_reasons = []
         else:
             self.bad_streak = 0
+            self.bad_reasons = []
             self.title = ICON_GOOD
             print("Good posture")
 

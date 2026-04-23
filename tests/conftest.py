@@ -2,6 +2,47 @@
 import sys
 from unittest.mock import MagicMock
 
+# Mock rumps with real stub classes
+mock_rumps = MagicMock()
+
+
+class _StubApp:
+    def __init__(self, title=None, **kwargs):
+        self.title = title
+        self.menu = []
+
+
+class _StubMenuItem:
+    def __init__(self, title=None, callback=None, **kwargs):
+        self.title = title
+        self.callback = callback
+        self._items = []
+
+    def add(self, item):
+        self._items.append(item)
+
+
+class _StubTimer:
+    def __init__(self, callback=None, interval=None, **kwargs):
+        self.callback = callback
+        self.interval = interval
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+mock_rumps.App = _StubApp
+mock_rumps.MenuItem = _StubMenuItem
+mock_rumps.Timer = _StubTimer
+sys.modules["rumps"] = mock_rumps
+
+# Mock cv2
+mock_cv2 = MagicMock()
+sys.modules["cv2"] = mock_cv2
+
 # Mock mediapipe with new API structure
 mock_mp = MagicMock()
 mock_mp.Image = MagicMock
