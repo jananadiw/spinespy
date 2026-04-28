@@ -13,10 +13,12 @@
 - **Menubar App** - Lightweight icon that shows your posture status (🦸 good posture / 🧟 bad posture)
 - **Periodic Snapshots** - Camera opens briefly every N minutes, then closes
 - **Posture Detection** - Detects slouching forward and side tilting using MediaPipe Pose
-- **Phone Detection** - Spots your phone using YOLO26s object detection
+- **Posture Calibration** - Saves your good-posture baseline so detection works across camera angles
+- **Improved Phone Detection** - Spots phone distractions using the upgraded YOLO26s object detection model
 - **Smart Alerts** - Only alerts after 5 consecutive bad snapshots (no false alarms!)
 - **Configurable Interval** - Choose check frequency: 30s, 1min, 2min, or 5min
 - **Pause/Resume** - Easily pause monitoring from the menu
+- **Poetry Startup** - Run the app directly with Poetry without manually activating a virtualenv
 
 ## Setup
 
@@ -25,12 +27,8 @@
 git clone https://github.com/jananadiw/spinespy.git
 cd spinespy
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
 # Install dependencies
-pip install -r requirements.txt
+poetry install
 ```
 
 ## Usage
@@ -39,25 +37,24 @@ pip install -r requirements.txt
 # Option 1: Using the run script
 ./run.sh
 
-# Option 2: Manual activation
-source venv/bin/activate
-python menubar_app.py
+# Option 2: Poetry script
+poetry run start
 
-# Option 3: With Poetry (if you prefer)
-poetry install
+# Option 3: Direct Python module
 poetry run python menubar_app.py
 ```
 
 The app appears as a 🦸 icon in your menubar. Right-click to:
 - **✓ Monitoring** - Pause/resume monitoring
 - **Interval** - Change snapshot frequency
+- **Calibrate** - Capture your current good-posture baseline
 - **Quit** - Exit the app
 
 ## How It Works
 
 1. Every N minutes, the app briefly opens your camera and takes a snapshot
-2. **MediaPipe Pose** analyzes the image for slouching or tilting
-3. **YOLO26s** checks for phones in the frame
+2. **MediaPipe Pose** analyzes the image for slouching or tilting relative to your calibrated baseline
+3. **YOLO26s** checks for phones in the frame with improved small-object detection
 4. Camera closes immediately after analysis
 5. Menubar icon updates: 🦸 (good) or 🧟 (bad posture)
 6. After 5 consecutive bad snapshots → plays alert sound
