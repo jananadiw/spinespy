@@ -49,6 +49,16 @@ yolo = YOLO(resource_path("yolo26s.pt"))
 PHONE_CLASS_ID = 67
 
 
+def camera_permission_hint():
+    """Return an actionable camera-access hint for the current platform."""
+    if sys.platform == "darwin":
+        return (
+            "macOS likely blocked camera access. Enable it in System Settings > Privacy & Security > "
+            "Camera for the exact app/process running SpineSpy (Terminal, iTerm, Python, or SpineSpy.app)."
+        )
+    return "Camera is unavailable, already in use by another app, or not permitted."
+
+
 def get_posture_metrics(landmarks):
     """Extract forward lean and tilt from landmarks."""
     nose = landmarks[0]
@@ -66,7 +76,7 @@ def calibrate():
     global baseline_lean, baseline_tilt
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        print("Calibration failed: camera error")
+        print(f"Calibration failed: camera error. {camera_permission_hint()}")
         return False
 
     time.sleep(0.5)
@@ -129,6 +139,7 @@ def take_snapshot(save_debug=False):
     """Capture single frame, analyze, return result."""
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
+        print(f"Snapshot failed: camera error. {camera_permission_hint()}")
         return None, "Camera error"
 
     time.sleep(0.5)
@@ -250,5 +261,10 @@ class PostureGuardApp(rumps.App):
         print(f"Interval set to {seconds}s")
 
 
-if __name__ == "__main__":
+def main():
+    """CLI/script entrypoint."""
     PostureGuardApp().run()
+
+
+if __name__ == "__main__":
+    main()
