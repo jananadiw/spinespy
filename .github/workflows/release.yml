@@ -27,7 +27,7 @@ jobs:
       - name: Download models
         run: |
           curl -L -o pose_landmarker.task "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-          curl -L -o yolov8n.pt "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt"
+          python -c "from ultralytics import YOLO; YOLO('yolo26s.pt')"
 
       - name: Build DMG
         run: |
@@ -35,7 +35,7 @@ jobs:
             --windowed \
             --noconfirm \
             --add-data "pose_landmarker.task:." \
-            --add-data "yolov8n.pt:." \
+            --add-data "yolo26s.pt:." \
             --hidden-import rumps \
             --hidden-import cv2 \
             --hidden-import mediapipe \
@@ -54,5 +54,6 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          name: SpineSpy ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
           files: SpineSpy.dmg
-          generate_release_notes: true
