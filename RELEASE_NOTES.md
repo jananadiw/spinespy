@@ -1,14 +1,9 @@
-<<<<<<< HEAD
 # SpineSpy v1.1.1
-=======
-# SpineSpy v1.1.0
->>>>>>> 2e40226 (feat: update release notes)
 
 Improved detection accuracy and camera-angle independence.
 
 ## What's New
 
-<<<<<<< HEAD
 - 🦸 **Menubar app** - Shows posture status (🦸 good / 🧟 bad)
 - 📸 **Periodic snapshots** - Camera opens briefly, then closes (not always-on)
 - 🧘 **Posture detection** - Detects slouching and side tilting via MediaPipe
@@ -26,7 +21,6 @@ Improved detection accuracy and camera-angle independence.
 - Fixed pytest collection so live camera demo scripts do not open the camera during test discovery
 - Added clearer macOS camera permission guidance when snapshots or calibration cannot access the webcam
 - Rebuilt the local Poetry environment after a corrupted OpenCV wheel caused Python crash reports in `cv2.abi3.so`
-=======
 - 🎯 **YOLO26s upgrade** - Upgraded phone detection model from YOLOv8n to YOLO26s (mAP 37.3 → 48.6), significantly improving small object detection accuracy
 - 📐 **Posture calibration** - New calibration system captures your good-posture baseline so detection works regardless of camera angle
 - 🔄 **Auto-calibrate on startup** - App automatically calibrates when launched
@@ -39,7 +33,6 @@ pip install -r requirements.txt
 ```
 
 The app will auto-download the new `yolo26s.pt` model (~19MB) on first launch.
->>>>>>> 2e40226 (feat: update release notes)
 
 ## Installation
 
