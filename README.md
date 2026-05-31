@@ -79,7 +79,7 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 ## Requirements
 
 - macOS (tested on macOS 10.15+)
-- Python 3.8 or higher
+- Python 3.10 through 3.13
 - Webcam
 
 ## Contributing
