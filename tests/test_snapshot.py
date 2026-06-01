@@ -133,23 +133,38 @@ class TestPostureGuardApp:
     @patch("menubar_app.take_snapshot")
     @patch("menubar_app.play_alert")
     @patch("menubar_app.rumps.notification")
-    def test_bad_streak_triggers_alert_and_notification(self, mock_notification, mock_alert, mock_snapshot):
+    def test_bad_streak_triggers_sound_clip(self, mock_notification, mock_alert, mock_snapshot):
         from menubar_app import BAD_STREAK_LIMIT
 
         mock_snapshot.return_value = (True, "Slouching (moderate)")
         app = self._make_app()
 
-        for i in range(BAD_STREAK_LIMIT):
+        for _ in range(BAD_STREAK_LIMIT):
             app.check_posture(None)
 
-        mock_alert.assert_called_once()
+        mock_alert.assert_called_once_with(True)
         assert app.bad_streak == 0
         assert app.bad_reasons == []
-        mock_notification.assert_any_call(
-            "SpineSpy",
-            "Posture Alert",
-            f"Slouching (moderate) detected {BAD_STREAK_LIMIT}/{BAD_STREAK_LIMIT} checks. Sit up straight!",
-        )
+        mock_notification.assert_not_called()
+
+    @patch("menubar_app.take_snapshot")
+    @patch("menubar_app.play_alert")
+    def test_sound_clip_toggle_disables_bad_posture_audio(self, mock_alert, mock_snapshot):
+        from menubar_app import BAD_STREAK_LIMIT
+
+        mock_snapshot.return_value = (True, "Slouching (moderate)")
+        app = self._make_app()
+
+        app.toggle_sound_clips(app.sound_clips_item)
+        assert app.sound_clips_enabled is False
+        assert app.sound_clips_item.title == "Sound Clips (off)"
+
+        for _ in range(BAD_STREAK_LIMIT):
+            app.check_posture(None)
+
+        mock_alert.assert_called_once_with(False)
+        assert app.bad_streak == 0
+        assert app.bad_reasons == []
 
     @patch("menubar_app.take_snapshot")
     @patch("menubar_app.play_alert")

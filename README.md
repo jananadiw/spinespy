@@ -16,6 +16,7 @@
 - **Posture Calibration** - Saves your good-posture baseline so detection works across camera angles
 - **Improved Phone Detection** - Spots phone distractions using the upgraded YOLO26s object detection model
 - **Smart Alerts** - Only alerts after 5 consecutive bad snapshots (no false alarms!)
+- **Sound Clip Alerts** - Plays a random posture reminder clip for bad posture, with a Settings toggle to turn clips off
 - **Configurable Interval** - Choose check frequency: 30s, 1min, 2min, or 5min
 - **Pause/Resume** - Easily pause monitoring from the menu
 - **Poetry Startup** - Run the app directly with Poetry without manually activating a virtualenv
@@ -47,6 +48,7 @@ poetry run python menubar_app.py
 The app appears as a 🦸 icon in your menubar. Right-click to:
 - **✓ Monitoring** - Pause/resume monitoring
 - **Interval** - Change snapshot frequency
+- **Settings → Sound Clips** - Turn posture reminder clips on/off
 - **Calibrate** - Capture your current good-posture baseline
 - **Quit** - Exit the app
 
@@ -57,7 +59,7 @@ The app appears as a 🦸 icon in your menubar. Right-click to:
 3. **YOLO26s** checks for phones in the frame with improved small-object detection
 4. Camera closes immediately after analysis
 5. Menubar icon updates: 🦸 (good) or 🧟 (bad posture)
-6. After 5 consecutive bad snapshots → plays alert sound
+6. After 5 consecutive bad snapshots → plays a random posture reminder clip if sound clips are enabled
 
 ## Configuration
 

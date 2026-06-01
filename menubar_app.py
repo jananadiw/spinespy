@@ -10,6 +10,8 @@ import time
 import threading
 import urllib.request
 import statistics
+import random
+import subprocess
 from collections import Counter
 
 
@@ -28,6 +30,16 @@ ICON_BAD = "🧟"
 SLOUCH_THRESHOLD = 0.1
 TILT_THRESHOLD = 0.05
 BAD_STREAK_LIMIT = 5
+
+# Alert audio clips
+ALERT_SOUND_FILES = [
+    "audio/Come on, shoulders back.mp3",
+    "audio/auditioning to be a shrimp.mp3",
+    "audio/did gravity offend u.mp3",
+    "audio/slouching_bella.mp3",
+    "audio/writing in cursive.mp3",
+    "audio/you're not a croissant.mp3",
+]
 
 # Calibration config
 CALIBRATION_FRAMES = 10
@@ -226,12 +238,28 @@ def take_snapshot(save_debug=False):
     return False, "Good posture"
 
 
-def play_alert():
-    """Play system alert sound."""
+def _available_alert_sounds():
+    """Return bundled alert sounds that are present on disk."""
+    return [resource_path(path) for path in ALERT_SOUND_FILES if os.path.exists(resource_path(path))]
+
+
+def play_alert(enabled=True):
+    """Play a random posture alert clip."""
+    if not enabled:
+        print("Alert sound clips disabled")
+        return False
+
+    sounds = _available_alert_sounds()
+    if not sounds:
+        print("No alert sound clips found")
+        return False
+
+    sound_path = random.choice(sounds)
     threading.Thread(
-        target=lambda: os.system("afplay /System/Library/Sounds/Glass.aiff"),
+        target=lambda: subprocess.run(["afplay", sound_path], check=False),
         daemon=True,
     ).start()
+    return True
 
 
 class PostureGuardApp(rumps.App):
@@ -242,8 +270,10 @@ class PostureGuardApp(rumps.App):
         self.interval = 60
         self.paused = False
         self.calibrating = False
+        self.sound_clips_enabled = True
 
         self.monitoring_item = rumps.MenuItem("✓ Monitoring", callback=self.toggle_monitoring)
+        self.sound_clips_item = rumps.MenuItem("✓ Sound Clips", callback=self.toggle_sound_clips)
 
         self.interval_menu = rumps.MenuItem("Interval")
         self.interval_menu.add(rumps.MenuItem("30 seconds", callback=lambda _: self.set_interval(30)))
@@ -251,13 +281,17 @@ class PostureGuardApp(rumps.App):
         self.interval_menu.add(rumps.MenuItem("2 minutes", callback=lambda _: self.set_interval(120)))
         self.interval_menu.add(rumps.MenuItem("5 minutes", callback=lambda _: self.set_interval(300)))
 
+        self.settings_menu = rumps.MenuItem("Settings")
+        self.settings_menu.add(self.sound_clips_item)
+
         self.menu = [
             self.monitoring_item,
             self.interval_menu,
+            self.settings_menu,
             None,
             rumps.MenuItem("Calibrate", callback=self.run_calibration),
             rumps.MenuItem("Save Snapshot", callback=lambda _: take_snapshot(save_debug=True)),
-            rumps.MenuItem("Test Alert", callback=lambda _: play_alert()),
+            rumps.MenuItem("Test Alert", callback=lambda _: play_alert(self.sound_clips_enabled)),
             rumps.MenuItem("Quit", callback=rumps.quit_application),
         ]
 
@@ -316,12 +350,8 @@ class PostureGuardApp(rumps.App):
             if self.bad_streak >= BAD_STREAK_LIMIT:
                 reason_counts = Counter(self.bad_reasons)
                 dominant, count = reason_counts.most_common(1)[0]
-                rumps.notification(
-                    "SpineSpy",
-                    "Posture Alert",
-                    f"{dominant} detected {count}/{self.bad_streak} checks. Sit up straight!",
-                )
-                play_alert()
+                print(f"Alert: {dominant} detected {count}/{self.bad_streak} checks")
+                play_alert(self.sound_clips_enabled)
                 self.bad_streak = 0
                 self.bad_reasons = []
         else:
@@ -333,6 +363,10 @@ class PostureGuardApp(rumps.App):
     def toggle_monitoring(self, sender):
         self.paused = not self.paused
         sender.title = "Monitoring (paused)" if self.paused else "✓ Monitoring"
+
+    def toggle_sound_clips(self, sender):
+        self.sound_clips_enabled = not self.sound_clips_enabled
+        sender.title = "✓ Sound Clips" if self.sound_clips_enabled else "Sound Clips (off)"
 
     def set_interval(self, seconds):
         self.interval = seconds
