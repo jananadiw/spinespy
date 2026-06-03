@@ -79,6 +79,13 @@ def camera_permission_hint():
     return "Camera is unavailable, already in use by another app, or not permitted."
 
 
+def open_camera():
+    """Open the system default camera."""
+    if sys.platform == "darwin":
+        return cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
+    return cv2.VideoCapture(0)
+
+
 def get_posture_metrics(landmarks):
     """Extract forward lean and tilt from landmarks."""
     nose = landmarks[0]
@@ -94,7 +101,7 @@ def get_posture_metrics(landmarks):
 def calibrate():
     """Capture multiple frames and compute a robust baseline from median metrics."""
     global baseline_lean, baseline_tilt, effective_slouch_threshold, effective_tilt_threshold
-    cap = cv2.VideoCapture(0)
+    cap = open_camera()
     if not cap.isOpened():
         print(f"Calibration failed: camera error. {camera_permission_hint()}")
         return False
@@ -184,7 +191,7 @@ SNAPSHOT_FRAMES = 3
 
 def take_snapshot(save_debug=False):
     """Capture multiple frames, analyze with majority voting, return result."""
-    cap = cv2.VideoCapture(0)
+    cap = open_camera()
     if not cap.isOpened():
         print(f"Snapshot failed: camera error. {camera_permission_hint()}")
         return None, "Camera error"

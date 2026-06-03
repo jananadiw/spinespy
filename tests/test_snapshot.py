@@ -6,6 +6,19 @@ from unittest.mock import MagicMock, patch, call
 import numpy as np
 
 
+class TestOpenCamera:
+    @patch("menubar_app.cv2.VideoCapture")
+    def test_uses_avfoundation_default_on_macos(self, mock_cap_class):
+        import menubar_app
+
+        menubar_app.cv2.CAP_AVFOUNDATION = 1200
+
+        with patch("menubar_app.sys.platform", "darwin"):
+            menubar_app.open_camera()
+
+        mock_cap_class.assert_called_once_with(0, 1200)
+
+
 class TestTakeSnapshot:
     @patch("menubar_app.cv2.VideoCapture")
     @patch("menubar_app.detect_phone")
@@ -165,6 +178,17 @@ class TestPostureGuardApp:
         mock_alert.assert_called_once_with(False)
         assert app.bad_streak == 0
         assert app.bad_reasons == []
+
+    @patch("menubar_app.take_snapshot")
+    @patch("menubar_app.play_alert")
+    def test_check_posture_uses_default_camera(self, mock_alert, mock_snapshot):
+        mock_snapshot.return_value = (False, "Good posture")
+        app = self._make_app()
+
+        app.check_posture(None)
+
+        mock_snapshot.assert_called_once_with()
+        mock_alert.assert_not_called()
 
     @patch("menubar_app.take_snapshot")
     @patch("menubar_app.play_alert")
