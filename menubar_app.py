@@ -33,12 +33,12 @@ BAD_STREAK_LIMIT = 5
 
 # Alert audio clips
 ALERT_SOUND_FILES = [
-    "audio/Come on, shoulders back.mp3",
-    "audio/auditioning to be a shrimp.mp3",
-    "audio/did gravity offend u.mp3",
-    "audio/slouching_bella.mp3",
-    "audio/writing in cursive.mp3",
-    "audio/you're not a croissant.mp3",
+    "assets/audio/Come on, shoulders back.mp3",
+    "assets/audio/auditioning to be a shrimp.mp3",
+    "assets/audio/did gravity offend u.mp3",
+    "assets/audio/slouching_bella.mp3",
+    "assets/audio/writing in cursive.mp3",
+    "assets/audio/you're not a croissant.mp3",
 ]
 
 # Calibration config

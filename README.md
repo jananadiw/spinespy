@@ -7,6 +7,18 @@
 
 If you want tiny local-first tools for healthier desk work, starring helps me know this is worth polishing.
 
+## Preview
+
+<p>
+  <img src="assets/snippets/spinespy-notification-compact.png" alt="SpineSpy posture alert notification" width="355">
+  <img src="assets/snippets/spinespy-menubar-menu.png" alt="SpineSpy menubar menu" width="325">
+  <img src="assets/snippets/spinespy-notification-wide.png" alt="SpineSpy posture alert notification on macOS desktop" width="520">
+</p>
+
+<video src="assets/snippets/demo-spinespy.mov" controls width="720" title="SpineSpy voice clip demo"></video>
+
+The [voice clip demo](assets/snippets/demo-spinespy.mov) shows how SpineSpy plays a posture reminder after repeated bad snapshots.
+
 ## Privacy
 
 SpineSpy processes snapshots locally on your device. Images are not uploaded, stored, or sent to external servers.

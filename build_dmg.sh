@@ -12,7 +12,7 @@ pyinstaller --name SpineSpy \
     --noconfirm \
     --add-data "pose_landmarker.task:." \
     --add-data "yolov8n.pt:." \
-    --add-data "audio:audio" \
+    --add-data "assets:assets" \
     --hidden-import rumps \
     --hidden-import cv2 \
     --hidden-import mediapipe \
