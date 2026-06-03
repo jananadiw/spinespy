@@ -1,25 +1,24 @@
 # SpineSpy
-[![Python](https://img.shields.io/github/languages/top/jananadiw/spinespy)](https://www.python.org/)
-[![OpenCV](https://img.shields.io/badge/OpenCV-4.x-green.svg)](https://pypi.org/project/opencv-python/)
-[![MediaPipe](https://img.shields.io/badge/MediaPipe-latest-orange.svg)](https://pypi.org/project/mediapipe/)
-[![YOLO26s](https://img.shields.io/badge/YOLO26s-Ultralytics-purple.svg)](https://pypi.org/project/ultralytics/)
-[![rumps](https://img.shields.io/badge/rumps-latest-red.svg)](https://pypi.org/project/rumps/)
-[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 
 > AI-powered posture & focus monitor that runs in your macOS menubar. Takes periodic snapshots to detect bad posture and phone distractions without keeping your camera always on.
 
+[![Python](https://img.shields.io/github/languages/top/jananadiw/spinespy)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
+
+If you want tiny local-first tools for healthier desk work, starring helps me know this is worth polishing.
+
+## Privacy
+
+SpineSpy processes snapshots locally on your device. Images are not uploaded, stored, or sent to external servers.
+
 ## Features
 
-- **Menubar App** - Lightweight icon that shows your posture status (🦸 good posture / 🧟 bad posture)
-- **Periodic Snapshots** - Camera opens briefly every N minutes, then closes
-- **Posture Detection** - Detects slouching forward and side tilting using MediaPipe Pose
-- **Posture Calibration** - Saves your good-posture baseline so detection works across camera angles
-- **Improved Phone Detection** - Spots phone distractions using the upgraded YOLO26s object detection model
-- **Smart Alerts** - Only alerts after 5 consecutive bad snapshots (no false alarms!)
-- **Sound Clip Alerts** - Plays a random posture reminder clip for bad posture, with a Settings toggle to turn clips off
-- **Configurable Interval** - Choose check frequency: 30s, 1min, 2min, or 5min
-- **Pause/Resume** - Easily pause monitoring from the menu
-- **Poetry Startup** - Run the app directly with Poetry without manually activating a virtualenv
+- **Checks posture without a camera always-on feeling** - Opens the webcam briefly, analyzes a snapshot, then closes it
+- **Learns your normal sitting position** - Calibrates against your own good-posture baseline instead of using a one-size-fits-all angle
+- **Catches both slouching and leaning** - Flags forward slouching and side tilt with MediaPipe Pose
+- **Nudges you when attention drifts** - Spots phone distractions with YOLO26s object detection
+- **Smart alerts** - Shows a notification and plays a posture reminder clip after repeated bad posture
+- **Easy to keep out of the way** - Runs from the macOS menubar with pause, interval, calibration, and sound toggles
 
 ## Setup
 
@@ -59,7 +58,7 @@ The app appears as a 🦸 icon in your menubar. Right-click to:
 3. **YOLO26s** checks for phones in the frame with improved small-object detection
 4. Camera closes immediately after analysis
 5. Menubar icon updates: 🦸 (good) or 🧟 (bad posture)
-6. After 5 consecutive bad snapshots → plays a random posture reminder clip if sound clips are enabled
+6. After 5 consecutive bad snapshots → shows a notification and plays a random reminder clip if sound clips are enabled
 
 ## Configuration
 
@@ -103,7 +102,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - MediaPipe for their excellent pose detection framework
 - Ultralytics for YOLO26s
 - The rumps library for making macOS menubar apps easy
-
----
-
-**⚠️ Privacy Note:** SpineSpy processes all images locally on your device. No data is sent to external servers.
