@@ -7,17 +7,11 @@
 
 If you want tiny local-first tools for healthier desk work, starring helps me know this is worth polishing.
 
-## Preview
+## Demo
 
-<p>
-  <img src="assets/snippets/spinespy-notification-compact.png" alt="SpineSpy posture alert notification" width="355">
-  <img src="assets/snippets/spinespy-menubar-menu.png" alt="SpineSpy menubar menu" width="325">
-  <img src="assets/snippets/spinespy-notification-wide.png" alt="SpineSpy posture alert notification on macOS desktop" width="520">
-</p>
+https://github.com/user-attachments/assets/ecd0b52f-ba7a-4458-8442-f950b8ad7be7
 
-<video src="assets/snippets/demo-spinespy.mov" controls width="720" title="SpineSpy voice clip demo"></video>
-
-The [voice clip demo](assets/snippets/demo-spinespy.mov) shows how SpineSpy plays a posture reminder after repeated bad snapshots.
+shows how SpineSpy plays a posture reminder after repeated bad snapshots.
 
 ## Privacy
 
