@@ -1,5 +1,12 @@
 # Decisions
 
+## 2026-06-08: Build DMG through Poetry
+
+- Decision: Run PyInstaller through Poetry and bundle `yolo26s.pt`.
+- Reason: The app loads `yolo26s.pt`, and Poetry already owns the supported Python 3.10-3.13 environment.
+- Impact: `./build_dmg.sh` now requires `poetry install --with dev` and fails early on unsupported Python or missing assets.
+- Revisit: If the project moves to a different packager or stops using Poetry.
+
 ## 2026-06-03: Use system default camera
 
 - Decision: Keep camera handling automatic and open the system default camera through AVFoundation on macOS.
