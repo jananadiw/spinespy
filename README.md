@@ -9,7 +9,7 @@ If you want tiny local-first tools for healthier desk work, starring helps me kn
 
 ## Demo
 
-https://github.com/user-attachments/assets/ecd0b52f-ba7a-4458-8442-f950b8ad7be7
+[Watch the demo](assets/snippets/demo-spinespy.mov)
 
 shows how SpineSpy plays a posture reminder after repeated bad snapshots.
 
