@@ -8,8 +8,10 @@
 If you want tiny local-first tools for healthier desk work, starring helps me know this is worth polishing.
 
 ## Demo
+<img width="720" height="368" alt="floating_pets_demo_2x" src="https://github.com/user-attachments/assets/d3683497-3486-4d6f-8821-7403d85c89f6" />
 
-[Watch the demo](assets/snippets/demo-spinespy.mov)
+
+
 
 shows how SpineSpy plays a posture reminder after repeated bad snapshots.
 
