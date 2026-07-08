@@ -50,6 +50,17 @@ poetry run start
 poetry run python menubar_app.py
 ```
 
+## Build
+
+```bash
+poetry install --with dev
+./build_dmg.sh
+```
+
+The build requires Python 3.10 through 3.13 and the local model assets
+`pose_landmarker.task` and `yolo26s.pt`. It outputs `dist/SpineSpy.app` and
+`SpineSpy.dmg`.
+
 The app appears as a 🦸 icon in your menubar. Right-click to:
 - **✓ Monitoring** - Pause/resume monitoring
 - **Interval** - Change snapshot frequency

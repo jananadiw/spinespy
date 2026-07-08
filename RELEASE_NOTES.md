@@ -1,58 +1,36 @@
 # SpineSpy v1.1.1
 
-Improved detection accuracy and camera-angle independence.
+AI-powered posture and focus monitoring for your macOS menubar.
 
-## What's New
+## Features
 
-- 🦸 **Menubar app** - Shows posture status (🦸 good / 🧟 bad)
-- 📸 **Periodic snapshots** - Camera opens briefly, then closes (not always-on)
-- 🧘 **Posture detection** - Detects slouching and side tilting via MediaPipe
-- 📐 **Posture calibration** - Saves your good-posture baseline for camera-angle independent checks
-- 📱 **Improved phone detection** - Spots phone distractions using the upgraded YOLO26s model
-- 🔔 **Smart alerts** - Only alerts after 5 consecutive bad snapshots
-- ⏱️ **Configurable intervals** - 30s, 1min, 2min, or 5min
-- ⏸️ **Pause/Resume** - Easy control from the menu
-- 🧰 **Poetry startup** - Run with `poetry run start` or `./run.sh`
-
-## What's Fixed
-
-- Fixed Poetry startup by adding a proper package entrypoint for `poetry run start`
-- Fixed `poetry install` package installation for the current project
-- Fixed pytest collection so live camera demo scripts do not open the camera during test discovery
-- Added clearer macOS camera permission guidance when snapshots or calibration cannot access the webcam
-- Rebuilt the local Poetry environment after a corrupted OpenCV wheel caused Python crash reports in `cv2.abi3.so`
-- 🎯 **YOLO26s upgrade** - Upgraded phone detection model from YOLOv8n to YOLO26s (mAP 37.3 → 48.6), significantly improving small object detection accuracy
-- 📐 **Posture calibration** - New calibration system captures your good-posture baseline so detection works regardless of camera angle
-- 🔄 **Auto-calibrate on startup** - App automatically calibrates when launched
-- 🎛️ **Calibrate menu item** - Re-calibrate anytime from the menubar menu with notification feedback
-
-## Upgrading
-
-```bash
-pip install -r requirements.txt
-```
-
-The app will auto-download the new `yolo26s.pt` model (~19MB) on first launch.
+- **Menubar status** - Shows posture status at a glance: good or bad.
+- **Periodic snapshots** - Opens the camera briefly for each check, then closes it.
+- **Posture detection** - Detects slouching and side tilting with MediaPipe.
+- **Phone detection** - Spots phone distractions with the upgraded YOLO26s model.
+- **Smart alerts** - Alerts only after 5 consecutive bad snapshots.
+- **Voice reminders** - Plays a bundled posture reminder clip after repeated bad posture.
+- **Sound toggle** - Lets you turn voice reminder clips on or off from Settings.
+- **Configurable intervals** - Supports 30s, 1min, 2min, and 5min checks.
+- **Pause and resume** - Lets you pause monitoring from the menubar.
+- **Calibration** - Learns your good-posture baseline for camera-angle independent checks.
 
 ## Installation
 
-1. Download `SpineSpy.dmg`
-2. Open the DMG and drag SpineSpy to Applications
-3. Open SpineSpy from Applications
-4. Grant camera permission when prompted
-
-## Developer Setup
-
-```bash
-poetry install
-poetry run start
-```
+1. Download `SpineSpy.dmg`.
+2. Open the DMG and drag SpineSpy to Applications.
+3. Open SpineSpy from Applications.
+4. Grant camera permission when prompted.
 
 ## Privacy
 
-All processing happens locally on your device. No data is sent to external servers.
+All processing happens locally on your device. SpineSpy does not upload, store, or send camera images to external servers.
 
 ## Requirements
 
 - macOS 10.15+
 - Webcam
+
+## Verification
+
+`SpineSpy.dmg` is signed and notarized with Developer ID.
