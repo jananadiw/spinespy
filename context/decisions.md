@@ -1,5 +1,26 @@
 # Decisions
 
+## 2026-07-08: Add pet speech bubble messages
+
+- Decision: Show a short rounded speech bubble beside the floating pet for each posture state.
+- Reason: The pet should feel more expressive without interrupting the user with modal dialogs.
+- Impact: Good, bad, paused, and calibrating states now update both artwork and text.
+- Revisit: If messages should depend on specific bad-posture reasons instead of one bad-state line.
+
+## 2026-07-08: Use artwork assets for the floating pet
+
+- Decision: Replace the floating pet emoji placeholders with bundled transparent posture artwork.
+- Reason: The pet panel should show the user's good and bad posture drawings instead of generic symbols.
+- Impact: Good, paused, and calibrating states use the upright pet image; bad posture uses the curled pet image.
+- Revisit: If the pet needs animated states or separate paused/calibrating artwork.
+
+## 2026-07-08: Use floating pet panel for posture state
+
+- Decision: Show posture state in a small always-on-top AppKit panel while keeping the menubar icon as a fallback.
+- Reason: The pet should stay visible above normal app windows and later support richer personalized cues.
+- Impact: Posture, calibration, and pause state changes now route through a shared pet/status helper.
+- Revisit: If the panel needs richer controls or animation.
+
 ## 2026-06-08: Build DMG through Poetry
 
 - Decision: Run PyInstaller through Poetry and bundle `yolo26s.pt`.

@@ -1,9 +1,23 @@
 """Integration tests for snapshot flow."""
 
 from collections import Counter
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 import numpy as np
+
+
+class _PetPanelStub:
+    def __init__(self):
+        self.state = None
+        self.state_changes = []
+
+    def set_state(self, state):
+        self.state = state
+        self.state_changes.append(state)
+
+    def show(self):
+        pass
 
 
 class TestOpenCamera:
@@ -138,10 +152,34 @@ class TestTakeSnapshot:
 class TestPostureGuardApp:
     def _make_app(self):
         from menubar_app import PostureGuardApp
-        with patch("menubar_app.threading.Thread"):
+        with patch("menubar_app.threading.Thread"), patch("menubar_app.FloatingPetPanel", _PetPanelStub):
             app = PostureGuardApp()
             app.timer = MagicMock()
         return app
+
+    def test_initializes_floating_pet_panel(self):
+        from menubar_app import ICON_GOOD
+
+        app = self._make_app()
+
+        assert app.pet_panel.state == "good"
+        assert app.pet_panel.state_changes == ["good"]
+        assert app.title == ICON_GOOD
+
+    def test_pet_image_assets_are_bundled(self):
+        import menubar_app
+
+        app_root = Path(menubar_app.__file__).resolve().parent
+
+        for relative_path in menubar_app.PET_IMAGE_FILES.values():
+            assert (app_root / relative_path).is_file()
+
+    def test_pet_states_have_messages(self):
+        import menubar_app
+
+        assert set(menubar_app.PET_MESSAGES) == {"good", "bad", "calibrating", "paused"}
+        assert menubar_app.PET_MESSAGES["good"] == "Sitting nice and straight!"
+        assert menubar_app.PET_MESSAGES["bad"] == "You're being a shrimp, my friend."
 
     @patch("menubar_app.take_snapshot")
     @patch("menubar_app.play_alert")
@@ -158,7 +196,22 @@ class TestPostureGuardApp:
         mock_alert.assert_called_once_with(True)
         assert app.bad_streak == 0
         assert app.bad_reasons == []
+        assert app.pet_panel.state == "bad"
         mock_notification.assert_not_called()
+
+    @patch("menubar_app.take_snapshot")
+    @patch("menubar_app.play_alert")
+    def test_bad_posture_updates_floating_pet(self, mock_alert, mock_snapshot):
+        from menubar_app import ICON_BAD
+
+        mock_snapshot.return_value = (True, "Slouching (moderate)")
+        app = self._make_app()
+
+        app.check_posture(None)
+
+        assert app.pet_panel.state == "bad"
+        assert app.title == ICON_BAD
+        mock_alert.assert_not_called()
 
     @patch("menubar_app.take_snapshot")
     @patch("menubar_app.play_alert")
@@ -203,6 +256,7 @@ class TestPostureGuardApp:
         assert app.bad_streak == 0
         assert app.bad_reasons == []
         mock_alert.assert_not_called()
+        assert app.pet_panel.state == "good"
 
     @patch("menubar_app.take_snapshot")
     def test_calibrating_skips_check(self, mock_snapshot):
@@ -211,3 +265,12 @@ class TestPostureGuardApp:
 
         app.check_posture(None)
         mock_snapshot.assert_not_called()
+
+    def test_pause_updates_floating_pet(self):
+        app = self._make_app()
+
+        app.toggle_monitoring(app.monitoring_item)
+        assert app.pet_panel.state == "paused"
+
+        app.toggle_monitoring(app.monitoring_item)
+        assert app.pet_panel.state == "good"

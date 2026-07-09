@@ -14,6 +14,67 @@ import random
 import subprocess
 from collections import Counter
 
+try:
+    from AppKit import (
+        NSBackingStoreBuffered,
+        NSColor,
+        NSFloatingWindowLevel,
+        NSFont,
+        NSImage,
+        NSImageScaleProportionallyUpOrDown,
+        NSImageView,
+        NSMakeRect,
+        NSPanel,
+        NSScreen,
+        NSTextField,
+        NSView,
+        NSWindowCollectionBehaviorCanJoinAllSpaces,
+        NSWindowCollectionBehaviorFullScreenAuxiliary,
+        NSWindowCollectionBehaviorStationary,
+        NSWindowStyleMaskBorderless,
+        NSWindowStyleMaskNonactivatingPanel,
+    )
+except ImportError:
+    NSPanel = None
+
+
+if NSPanel is not None:
+
+    class DraggablePetImageView(NSImageView):
+        def acceptsFirstMouse_(self, event):
+            return True
+
+        def mouseDown_(self, event):
+            window = self.window()
+            if window is not None:
+                window.performWindowDragWithEvent_(event)
+
+
+    class DraggablePetMessageField(NSTextField):
+        def acceptsFirstMouse_(self, event):
+            return True
+
+        def mouseDown_(self, event):
+            window = self.window()
+            if window is not None:
+                window.performWindowDragWithEvent_(event)
+
+
+    class DraggablePetBubbleView(NSView):
+        def acceptsFirstMouse_(self, event):
+            return True
+
+        def mouseDown_(self, event):
+            window = self.window()
+            if window is not None:
+                window.performWindowDragWithEvent_(event)
+
+
+else:
+    DraggablePetImageView = None
+    DraggablePetMessageField = None
+    DraggablePetBubbleView = None
+
 
 def resource_path(relative_path):
     """Get path to resource, works for dev and PyInstaller."""
@@ -25,6 +86,17 @@ def resource_path(relative_path):
 # Icons
 ICON_GOOD = "🦸"
 ICON_BAD = "🧟"
+PET_IMAGE_FILES = {
+    "good": "assets/pets/posture-good.png",
+    "bad": "assets/pets/posture-bad.png",
+}
+PET_MESSAGES = {
+    "good": "Sitting nice and straight!",
+    "bad": "You're being a shrimp, my friend.",
+    "calibrating": "Hold still. Finding your baseline...",
+    "paused": "Taking a posture break.",
+}
+PET_BUBBLE_SIZE = (224, 42)
 
 # Detection config
 SLOUCH_THRESHOLD = 0.1
@@ -269,6 +341,106 @@ def play_alert(enabled=True):
     return True
 
 
+class FloatingPetPanel:
+    def __init__(self):
+        self.state = "good"
+        self.window = None
+        self.image_view = None
+        self.bubble_view = None
+        self.message_field = None
+
+    def _build_panel(self):
+        width = 338
+        height = 112
+        bubble_frame, image_frame = self._layout(height)
+        x, y = self._default_origin(width, height)
+        style = NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
+        self.window = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
+            NSMakeRect(x, y, width, height),
+            style,
+            NSBackingStoreBuffered,
+            False,
+        )
+        self.window.setOpaque_(False)
+        self.window.setBackgroundColor_(NSColor.clearColor())
+        self.window.setHasShadow_(True)
+        self.window.setLevel_(NSFloatingWindowLevel)
+        self.window.setHidesOnDeactivate_(False)
+        self.window.setMovableByWindowBackground_(True)
+        self.window.setCollectionBehavior_(
+            NSWindowCollectionBehaviorCanJoinAllSpaces
+            | NSWindowCollectionBehaviorFullScreenAuxiliary
+            | NSWindowCollectionBehaviorStationary
+        )
+
+        self.bubble_view = DraggablePetBubbleView.alloc().initWithFrame_(bubble_frame)
+        self.bubble_view.setWantsLayer_(True)
+        self.bubble_view.layer().setBackgroundColor_(NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.94).CGColor())
+        self.bubble_view.layer().setCornerRadius_(12)
+        self.bubble_view.layer().setMasksToBounds_(True)
+        self.window.contentView().addSubview_(self.bubble_view)
+
+        self.message_field = DraggablePetMessageField.alloc().initWithFrame_(
+            self._message_frame(bubble_frame.size.width, bubble_frame.size.height)
+        )
+        self.message_field.setEditable_(False)
+        self.message_field.setSelectable_(False)
+        self.message_field.setBordered_(False)
+        self.message_field.setBezeled_(False)
+        self.message_field.setDrawsBackground_(False)
+        self.message_field.setTextColor_(NSColor.colorWithCalibratedWhite_alpha_(0.12, 1.0))
+        self.message_field.setFont_(NSFont.systemFontOfSize_(12))
+        self.message_field.cell().setWraps_(False)
+        self.message_field.cell().setScrollable_(False)
+        self.bubble_view.addSubview_(self.message_field)
+
+        self.image_view = DraggablePetImageView.alloc().initWithFrame_(image_frame)
+        self.image_view.setImageScaling_(NSImageScaleProportionallyUpOrDown)
+        self.window.contentView().addSubview_(self.image_view)
+
+    def _layout(self, height):
+        bubble_width, bubble_height = PET_BUBBLE_SIZE
+        image_width = 96
+        gap = 8
+        margin = 8
+        bubble_y = (height - bubble_height) / 2
+        bubble_frame = NSMakeRect(margin, bubble_y, bubble_width, bubble_height)
+        image_frame = NSMakeRect(margin + bubble_width + gap, 0, image_width, height)
+        return bubble_frame, image_frame
+
+    def _message_frame(self, bubble_width, bubble_height):
+        horizontal_padding = 12
+        vertical_padding = 9
+        return NSMakeRect(
+            horizontal_padding,
+            vertical_padding - 1,
+            bubble_width - (horizontal_padding * 2),
+            bubble_height - (vertical_padding * 2) + 2,
+        )
+
+    def _default_origin(self, width, height):
+        screen = NSScreen.mainScreen()
+        if screen is None:
+            return 80, 80
+        frame = screen.visibleFrame()
+        return frame.origin.x + frame.size.width - width - 28, frame.origin.y + frame.size.height - height - 28
+
+    def set_state(self, state):
+        self.state = state if state in {"good", "bad", "calibrating", "paused"} else "good"
+        if self.image_view is not None:
+            image_path = resource_path(PET_IMAGE_FILES.get(self.state, PET_IMAGE_FILES["good"]))
+            self.image_view.setImage_(NSImage.alloc().initWithContentsOfFile_(image_path))
+        if self.message_field is not None:
+            self.message_field.setStringValue_(PET_MESSAGES.get(self.state, PET_MESSAGES["good"]))
+
+    def show(self):
+        if self.window is None and NSPanel is not None:
+            self._build_panel()
+            self.set_state(self.state)
+        if self.window is not None:
+            self.window.orderFrontRegardless()
+
+
 class PostureGuardApp(rumps.App):
     def __init__(self):
         super().__init__(ICON_GOOD, quit_button=None)
@@ -278,6 +450,9 @@ class PostureGuardApp(rumps.App):
         self.paused = False
         self.calibrating = False
         self.sound_clips_enabled = True
+        self.pet_panel = FloatingPetPanel()
+        self.set_posture_state("good")
+        rumps.events.before_start.register(self.pet_panel.show)
 
         self.monitoring_item = rumps.MenuItem("✓ Monitoring", callback=self.toggle_monitoring)
         self.sound_clips_item = rumps.MenuItem("✓ Sound Clips", callback=self.toggle_sound_clips)
@@ -307,11 +482,20 @@ class PostureGuardApp(rumps.App):
 
         threading.Thread(target=self._startup_calibration, daemon=True).start()
 
+    def set_posture_state(self, state):
+        self.pet_panel.set_state(state)
+        self.title = {
+            "good": ICON_GOOD,
+            "bad": ICON_BAD,
+            "calibrating": "📐",
+            "paused": "💤",
+        }.get(state, ICON_GOOD)
+
     def _startup_calibration(self):
         rumps.notification("SpineSpy", "Starting up", "Sit with good posture. Auto-calibrating in 3 seconds...")
         time.sleep(3)
         self.calibrating = True
-        self.title = "📐"
+        self.set_posture_state("calibrating")
         try:
             if calibrate():
                 rumps.notification("SpineSpy", "Calibration complete", "Your good posture baseline has been captured.")
@@ -319,7 +503,7 @@ class PostureGuardApp(rumps.App):
                 rumps.notification("SpineSpy", "Calibration failed", "Could not detect your pose. Make sure you're visible and well-lit.")
         finally:
             self.calibrating = False
-            self.title = ICON_GOOD
+            self.set_posture_state("good")
 
     def run_calibration(self, _):
         threading.Thread(target=self._calibrate_with_feedback, daemon=True).start()
@@ -328,7 +512,7 @@ class PostureGuardApp(rumps.App):
         rumps.notification("SpineSpy", "Calibration starting", "Sit in your best posture. Calibration begins in 3 seconds...")
         time.sleep(3)
         self.calibrating = True
-        self.title = "📐"
+        self.set_posture_state("calibrating")
         try:
             if calibrate():
                 rumps.notification("SpineSpy", "Calibration complete", "Your good posture baseline has been captured.")
@@ -336,7 +520,7 @@ class PostureGuardApp(rumps.App):
                 rumps.notification("SpineSpy", "Calibration failed", "Could not detect your pose in enough frames. Make sure you're visible and well-lit.")
         finally:
             self.calibrating = False
-            self.title = ICON_GOOD
+            self.set_posture_state("good")
 
     def check_posture(self, _):
         if self.paused or self.calibrating:
@@ -351,7 +535,7 @@ class PostureGuardApp(rumps.App):
         if is_bad:
             self.bad_streak += 1
             self.bad_reasons.append(reason)
-            self.title = ICON_BAD
+            self.set_posture_state("bad")
             print(f"Bad: {reason} (streak: {self.bad_streak}/{BAD_STREAK_LIMIT})")
 
             if self.bad_streak >= BAD_STREAK_LIMIT:
@@ -364,12 +548,13 @@ class PostureGuardApp(rumps.App):
         else:
             self.bad_streak = 0
             self.bad_reasons = []
-            self.title = ICON_GOOD
+            self.set_posture_state("good")
             print("Good posture")
 
     def toggle_monitoring(self, sender):
         self.paused = not self.paused
         sender.title = "Monitoring (paused)" if self.paused else "✓ Monitoring"
+        self.set_posture_state("paused" if self.paused else "good")
 
     def toggle_sound_clips(self, sender):
         self.sound_clips_enabled = not self.sound_clips_enabled

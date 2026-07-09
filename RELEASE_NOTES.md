@@ -1,9 +1,10 @@
-# SpineSpy v1.1.1
+# SpineSpy v1.2.0
 
 AI-powered posture and focus monitoring for your macOS menubar.
 
 ## Features
 
+- **Floating posture pet** - Shows a small always-on-top pet with posture artwork and a state message.
 - **Menubar status** - Shows posture status at a glance: good or bad.
 - **Periodic snapshots** - Opens the camera briefly for each check, then closes it.
 - **Posture detection** - Detects slouching and side tilting with MediaPipe.
@@ -14,6 +15,11 @@ AI-powered posture and focus monitoring for your macOS menubar.
 - **Configurable intervals** - Supports 30s, 1min, 2min, and 5min checks.
 - **Pause and resume** - Lets you pause monitoring from the menubar.
 - **Calibration** - Learns your good-posture baseline for camera-angle independent checks.
+
+## Packaging
+
+- Bundles pet artwork and existing reminder assets into the GitHub release DMG.
+- Stamps the macOS app bundle with the package version instead of `0.0.0`.
 
 ## Installation
 
