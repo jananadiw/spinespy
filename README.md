@@ -24,7 +24,7 @@ SpineSpy processes snapshots locally on your device. Images are not uploaded, st
 - **Catches both slouching and leaning** - Flags forward slouching and side tilt with MediaPipe Pose
 - **Nudges you when attention drifts** - Spots phone distractions with YOLO26s object detection
 - **Smart alerts** - Shows a notification and plays a posture reminder clip after repeated bad posture
-- **Easy to keep out of the way** - Runs from the macOS menubar with pause, interval, calibration, and sound toggles
+- **Easy to keep out of the way** - Runs from the macOS menubar with a floating posture pet and speech bubble, pause, interval, calibration, and sound toggles
 
 ## Setup
 
@@ -61,7 +61,7 @@ The build requires Python 3.10 through 3.13 and the local model assets
 `pose_landmarker.task` and `yolo26s.pt`. It outputs `dist/SpineSpy.app` and
 `SpineSpy.dmg`.
 
-The app appears as a 🦸 icon in your menubar. Right-click to:
+The app appears as a 🦸 icon in your menubar and shows a small floating posture pet with a state message above your windows. Right-click the menubar icon to:
 - **✓ Monitoring** - Pause/resume monitoring
 - **Interval** - Change snapshot frequency
 - **Settings → Sound Clips** - Turn posture reminder clips on/off
@@ -74,7 +74,7 @@ The app appears as a 🦸 icon in your menubar. Right-click to:
 2. **MediaPipe Pose** analyzes the image for slouching or tilting relative to your calibrated baseline
 3. **YOLO26s** checks for phones in the frame with improved small-object detection
 4. Camera closes immediately after analysis
-5. Menubar icon updates: 🦸 (good) or 🧟 (bad posture)
+5. Floating pet artwork, speech bubble, and menubar icon update: upright pet/🦸 (good) or curled pet/🧟 (bad posture)
 6. After 5 consecutive bad snapshots → shows a notification and plays a random reminder clip if sound clips are enabled
 
 ## Configuration
