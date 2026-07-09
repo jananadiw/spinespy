@@ -64,6 +64,11 @@ poetry run pyinstaller --name SpineSpy \
 /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${APP_VERSION}" dist/SpineSpy.app/Contents/Info.plist 2>/dev/null || \
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_VERSION}" dist/SpineSpy.app/Contents/Info.plist
 
+# PlistBuddy edits happen after PyInstaller signs the bundle, so re-sign to keep
+# Gatekeeper from treating the downloaded app as damaged.
+codesign --force --deep --sign - dist/SpineSpy.app
+codesign --verify --deep --strict --verbose=2 dist/SpineSpy.app
+
 echo ""
 echo "=== Creating DMG ==="
 rm -rf dist/SpineSpy

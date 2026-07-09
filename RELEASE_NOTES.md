@@ -1,4 +1,4 @@
-# SpineSpy v1.2.0
+# SpineSpy v1.2.1
 
 AI-powered posture and focus monitoring for your macOS menubar.
 
@@ -20,6 +20,7 @@ AI-powered posture and focus monitoring for your macOS menubar.
 
 - Bundles pet artwork and existing reminder assets into the GitHub release DMG.
 - Stamps the macOS app bundle with the package version instead of `0.0.0`.
+- Re-signs the app after release metadata updates so macOS does not treat the downloaded bundle as damaged.
 
 ## Installation
 

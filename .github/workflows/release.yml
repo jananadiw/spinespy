@@ -61,6 +61,8 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" dist/SpineSpy.app/Contents/Info.plist
           /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${APP_VERSION}" dist/SpineSpy.app/Contents/Info.plist 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_VERSION}" dist/SpineSpy.app/Contents/Info.plist
+          codesign --force --deep --sign - dist/SpineSpy.app
+          codesign --verify --deep --strict --verbose=2 dist/SpineSpy.app
           mkdir -p dist/dmg
           cp -r dist/SpineSpy.app dist/dmg/
           ln -s /Applications dist/dmg/Applications
