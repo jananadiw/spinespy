@@ -10,20 +10,12 @@ license = "MIT"
 python = ">=3.10,<3.14"
 opencv-python = "^4.8.0"
 mediapipe = "^0.10.0"
-ultralytics = "^8.0.0"
 rumps = "^0.4.0"
 pyobjc-framework-Cocoa = "^12.1"
-torch = ">=2.8.0,<2.9.0"
-torchvision = ">=0.23.0,<0.24.0"
 
 [tool.poetry.scripts]
 start = "spinespy.cli:start"
 test-phone = "spinespy.cli:test_phone"
-
-[[tool.poetry.source]]
-name = "pytorch"
-url = "https://download.pytorch.org/whl/cpu"
-priority = "explicit"
 
 [build-system]
 requires = ["poetry-core"]

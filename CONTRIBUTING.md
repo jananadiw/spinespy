@@ -6,15 +6,17 @@ Thanks for your interest in contributing! Here's how to get started.
 
 1. Fork the repository
 2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/spinespy.git`
-3. Create a virtual environment: `python3 -m venv venv && source venv/bin/activate`
-4. Install dependencies: `pip install -r requirements.txt`
+3. Install Poetry 2.3 or newer
+4. Install locked dependencies: `poetry install --with dev`
+5. Download verified models: `./scripts/download_models.sh`
 
 ## Making Changes
 
 1. Create a feature branch: `git checkout -b feature/your-feature-name`
 2. Make your changes
-3. Test locally: `python menubar_app.py`
-4. Commit with a clear message: `git commit -m "feat: add your feature"`
+3. Run the automated tests: `poetry run pytest -q`
+4. Test the app locally when behavior changes: `poetry run start`
+5. Commit with a clear message: `git commit -m "feat: add your feature"`
 
 ## Commit Messages
 

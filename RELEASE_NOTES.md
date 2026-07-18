@@ -1,43 +1,29 @@
-# SpineSpy v1.2.1
+# SpineSpy - Unreleased
 
-AI-powered posture and focus monitoring for your macOS menubar.
+This release focuses on easier installation, verifiable privacy, and clearer
+camera behavior.
 
-## Features
+## Adoption and trust improvements
 
-- **Floating posture pet** - Shows a small always-on-top pet with posture artwork and a state message.
-- **Menubar status** - Shows posture status at a glance: good or bad.
-- **Periodic snapshots** - Opens the camera briefly for each check, then closes it.
-- **Posture detection** - Detects slouching and side tilting with MediaPipe.
-- **Phone detection** - Spots phone distractions with the upgraded YOLO26s model.
-- **Smart alerts** - Alerts only after 5 consecutive bad snapshots.
-- **Voice reminders** - Plays a bundled posture reminder clip after repeated bad posture.
-- **Sound toggle** - Lets you turn voice reminder clips on or off from Settings.
-- **Configurable intervals** - Supports 30s, 1min, 2min, and 5min checks.
-- **Pause and resume** - Lets you pause monitoring from the menubar.
-- **Calibration** - Learns your good-posture baseline for camera-angle independent checks.
+- Replaces the PyTorch/Ultralytics phone-detection runtime with a lightweight
+  MediaPipe EfficientDet-Lite0 model while preserving phone detection.
+- Enforces a 200 MB maximum compressed DMG size in local and CI builds.
+- Adds pull-request CI for the complete test suite and a packaging smoke test.
+- Makes model downloads explicit and verifies pinned SHA-256 checksums.
+- Persists the monitoring interval, sound preference, and posture calibration
+  locally between launches.
+- Shows when the camera is opening, actively capturing, off, and processing the
+  captured frame locally.
 
-## Packaging
+## Release verification
 
-- Bundles pet artwork and existing reminder assets into the GitHub release DMG.
-- Stamps the macOS app bundle with the package version instead of `0.0.0`.
-- Re-signs the app after release metadata updates so macOS does not treat the downloaded bundle as damaged.
-
-## Installation
-
-1. Download `SpineSpy.dmg`.
-2. Open the DMG and drag SpineSpy to Applications.
-3. Open SpineSpy from Applications.
-4. Grant camera permission when prompted.
+Local builds are ad hoc signed and are not notarized. Tagged GitHub releases
+are published only if Developer ID signing, hardened-runtime signing, Apple
+notarization, stapling, and Gatekeeper verification all succeed. See
+`docs/releasing.md` for the required secrets and verification commands.
 
 ## Privacy
 
-All processing happens locally on your device. SpineSpy does not upload, store, or send camera images to external servers.
-
-## Requirements
-
-- macOS 10.15+
-- Webcam
-
-## Verification
-
-`SpineSpy.dmg` is signed and notarized with Developer ID.
+Monitoring uses bundled on-device models and makes no network requests. Camera
+frames remain in memory and are discarded after analysis unless the user
+explicitly selects **Save Snapshot**.

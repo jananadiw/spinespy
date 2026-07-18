@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch, call
 
 import numpy as np
 
+from spinespy.settings import AppSettings, CalibrationSettings
+
 
 class _PetPanelStub:
     def __init__(self):
@@ -31,6 +33,26 @@ class TestOpenCamera:
             menubar_app.open_camera()
 
         mock_cap_class.assert_called_once_with(0, 1200)
+
+
+class TestDetectPhone:
+    @patch("menubar_app.get_phone_detections")
+    def test_detects_cell_phone_from_mediapipe_result(self, mock_detections):
+        from menubar_app import detect_phone
+
+        category = MagicMock(category_name="cell phone", score=0.82)
+        detection = MagicMock(categories=[category])
+        mock_detections.return_value = [detection]
+
+        assert detect_phone(np.zeros((480, 640, 3), dtype=np.uint8)) is True
+
+    @patch("menubar_app.get_phone_detections")
+    def test_returns_false_without_cell_phone(self, mock_detections):
+        from menubar_app import detect_phone
+
+        mock_detections.return_value = []
+
+        assert detect_phone(np.zeros((480, 640, 3), dtype=np.uint8)) is False
 
 
 class TestTakeSnapshot:
@@ -98,6 +120,40 @@ class TestTakeSnapshot:
 
     @patch("menubar_app.cv2.VideoCapture")
     @patch("menubar_app.detect_phone")
+    @patch("menubar_app.pose_detector")
+    def test_camera_state_reports_exact_capture_window(
+        self, mock_pose_detector, mock_detect_phone, mock_cap_class
+    ):
+        from menubar_app import take_snapshot
+
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = True
+        mock_cap.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+        mock_cap_class.return_value = mock_cap
+        mock_pose_detector.detect.return_value = MagicMock(pose_landmarks=None)
+        mock_detect_phone.return_value = False
+        states = []
+
+        take_snapshot(camera_state_callback=states.append)
+
+        assert states == ["opening", "on", "off"]
+        mock_cap.release.assert_called_once()
+
+    @patch("menubar_app.cv2.VideoCapture")
+    def test_camera_state_returns_to_off_after_open_error(self, mock_cap_class):
+        from menubar_app import take_snapshot
+
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = False
+        mock_cap_class.return_value = mock_cap
+        states = []
+
+        take_snapshot(camera_state_callback=states.append)
+
+        assert states == ["opening", "off"]
+
+    @patch("menubar_app.cv2.VideoCapture")
+    @patch("menubar_app.detect_phone")
     @patch("menubar_app.check_posture")
     @patch("menubar_app.pose_detector")
     def test_majority_voting_bad(self, mock_pose_detector, mock_check, mock_detect_phone, mock_cap_class):
@@ -150,10 +206,12 @@ class TestTakeSnapshot:
 
 
 class TestPostureGuardApp:
-    def _make_app(self):
+    def _make_app(self, settings=None):
         from menubar_app import PostureGuardApp
+        settings_store = MagicMock()
+        settings_store.load.return_value = settings or AppSettings()
         with patch("menubar_app.threading.Thread"), patch("menubar_app.FloatingPetPanel", _PetPanelStub):
-            app = PostureGuardApp()
+            app = PostureGuardApp(settings_store=settings_store)
             app.timer = MagicMock()
         return app
 
@@ -177,9 +235,10 @@ class TestPostureGuardApp:
     def test_pet_states_have_messages(self):
         import menubar_app
 
-        assert set(menubar_app.PET_MESSAGES) == {"good", "bad", "calibrating", "paused"}
+        assert set(menubar_app.PET_MESSAGES) == {"good", "bad", "checking", "calibrating", "paused"}
         assert menubar_app.PET_MESSAGES["good"] == "Sitting nice and straight!"
         assert menubar_app.PET_MESSAGES["bad"] == "You're being a shrimp, my friend."
+        assert "Camera" in menubar_app.PET_MESSAGES["checking"]
 
     @patch("menubar_app.take_snapshot")
     @patch("menubar_app.play_alert")
@@ -240,7 +299,7 @@ class TestPostureGuardApp:
 
         app.check_posture(None)
 
-        mock_snapshot.assert_called_once_with()
+        mock_snapshot.assert_called_once_with(camera_state_callback=app._camera_state_changed)
         mock_alert.assert_not_called()
 
     @patch("menubar_app.take_snapshot")
@@ -274,3 +333,59 @@ class TestPostureGuardApp:
 
         app.toggle_monitoring(app.monitoring_item)
         assert app.pet_panel.state == "good"
+
+    def test_loads_persisted_preferences_and_calibration(self):
+        import menubar_app
+
+        app = self._make_app(
+            AppSettings(
+                interval=120,
+                sound_clips_enabled=False,
+                calibration=CalibrationSettings(
+                    baseline_lean=0.11,
+                    baseline_tilt=0.02,
+                    slouch_threshold=0.14,
+                    tilt_threshold=0.07,
+                ),
+            )
+        )
+
+        assert app.interval == 120
+        assert app.sound_clips_enabled is False
+        assert app.has_saved_calibration is True
+        assert app.sound_clips_item.title == "Sound Clips (off)"
+        assert app.interval_items[120].title == "✓ 2 minutes"
+        assert menubar_app.baseline_lean == 0.11
+        assert menubar_app.effective_tilt_threshold == 0.07
+
+    def test_camera_status_is_visible_during_capture_and_processing(self):
+        app = self._make_app()
+
+        app._camera_state_changed("opening")
+        assert app.camera_status_item.title == "Camera: Opening…"
+        assert app.pet_panel.state == "checking"
+
+        app._camera_state_changed("on")
+        assert app.camera_status_item.title == "Camera: On • Capturing"
+
+        app._camera_state_changed("off")
+        assert app.camera_status_item.title == "Camera: Off • Processing locally"
+
+        app._camera_processing_finished()
+        assert app.camera_status_item.title == "Camera: Off"
+
+    @patch("menubar_app.rumps.notification")
+    @patch("menubar_app.take_snapshot", side_effect=RuntimeError("missing model"))
+    def test_save_snapshot_restores_pet_state_when_model_is_missing(
+        self, mock_snapshot, mock_notification
+    ):
+        app = self._make_app()
+        app.set_posture_state("bad")
+
+        app.save_snapshot(None)
+
+        assert app.pet_panel.state == "bad"
+        assert app.camera_status_item.title == "Camera: Off"
+        mock_notification.assert_called_once_with(
+            "SpineSpy", "Model missing", "missing model"
+        )
