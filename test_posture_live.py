@@ -3,20 +3,16 @@
 
 import cv2
 import mediapipe as mp
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
 import time
-import os
-import urllib.request
 
-from menubar_app import SLOUCH_THRESHOLD, TILT_THRESHOLD, check_posture, get_posture_metrics, calibrate, baseline_lean, baseline_tilt
-
-# Download pose model if needed
-MODEL_PATH = "pose_landmarker.task"
-MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-if not os.path.exists(MODEL_PATH):
-    print("Downloading pose model...")
-    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+from menubar_app import (
+    SLOUCH_THRESHOLD,
+    TILT_THRESHOLD,
+    _get_pose_detector,
+    calibrate,
+    check_posture,
+    get_posture_metrics,
+)
 
 # Key landmark indices
 NOSE = 0
@@ -38,9 +34,7 @@ CONNECTIONS = [
 
 
 def main():
-    base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
-    options = vision.PoseLandmarkerOptions(base_options=base_options, output_segmentation_masks=False)
-    pose_detector = vision.PoseLandmarker.create_from_options(options)
+    pose_detector = _get_pose_detector()
 
     print("Opening camera...")
     cap = cv2.VideoCapture(0)

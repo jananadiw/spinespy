@@ -18,8 +18,9 @@ htmlcov/
 # OS
 .DS_Store
 
-# ML models (downloaded at runtime)
+# ML models (downloaded explicitly for source builds)
 pose_landmarker.task
+*.tflite
 *.pt
 
 # Debug files

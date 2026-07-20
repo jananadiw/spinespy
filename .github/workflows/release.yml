@@ -3,74 +3,103 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
-  build:
+  release:
     runs-on: macos-latest
     permissions:
       contents: write
+    env:
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
+          cache: pip
 
-      - name: Install dependencies
+      - name: Require release signing secrets
+        run: |
+          for name in \
+            MACOS_CERTIFICATE_P12 \
+            MACOS_CERTIFICATE_PASSWORD \
+            KEYCHAIN_PASSWORD \
+            APPLE_ID \
+            APPLE_APP_PASSWORD \
+            APPLE_TEAM_ID
+          do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required release secret: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Install Poetry and dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          python -m pip install "poetry==2.3.1"
+          poetry install --with dev --no-interaction
 
-      - name: Download models
+      - name: Download verified models
+        run: ./scripts/download_models.sh
+
+      - name: Run tests
+        run: poetry run pytest -q
+
+      - name: Import Developer ID certificate
         run: |
-          curl -L -o pose_landmarker.task "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-          python -c "from ultralytics import YOLO; YOLO('yolo26s.pt')"
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/spinespy-signing.keychain-db"
+          export CERTIFICATE_PATH KEYCHAIN_PATH
+          python -c 'import base64, os, pathlib; pathlib.Path(os.environ["CERTIFICATE_PATH"]).write_bytes(base64.b64decode(os.environ["MACOS_CERTIFICATE_P12"]))'
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          CODESIGN_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"
+          if [[ -z "$CODESIGN_IDENTITY" ]]; then
+            echo "Developer ID Application identity not found in certificate." >&2
+            exit 1
+          fi
+          echo "CODESIGN_IDENTITY=$CODESIGN_IDENTITY" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
-      - name: Build DMG
+      - name: Build signed DMG
+        run: MAX_DMG_SIZE_MB=200 ./build_dmg.sh
+
+      - name: Notarize and staple DMG
         run: |
-          APP_VERSION="$(python - <<'PY'
-          import pathlib
-          import tomllib
+          xcrun notarytool submit SpineSpy.dmg \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple SpineSpy.dmg
+          xcrun stapler validate SpineSpy.dmg
+          codesign --verify --verbose=2 SpineSpy.dmg
+          spctl --assess --type open --context context:primary-signature --verbose=2 SpineSpy.dmg
 
-          with pathlib.Path("pyproject.toml").open("rb") as f:
-              print(tomllib.load(f)["tool"]["poetry"]["version"])
-          PY
-          )"
-          pyinstaller --name SpineSpy \
-            --windowed \
-            --noconfirm \
-            --add-data "pose_landmarker.task:." \
-            --add-data "yolo26s.pt:." \
-            --add-data "assets:assets" \
-            --hidden-import rumps \
-            --hidden-import cv2 \
-            --hidden-import mediapipe \
-            --hidden-import ultralytics \
-            --hidden-import mediapipe.tasks.c \
-            --hidden-import AppKit \
-            --collect-all mediapipe \
-            --osx-bundle-identifier com.jananadiw.spinespy \
-            menubar_app.py
-          /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" dist/SpineSpy.app/Contents/Info.plist 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :LSUIElement true" dist/SpineSpy.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'SpineSpy needs camera access to monitor your posture.'" dist/SpineSpy.app/Contents/Info.plist 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'SpineSpy needs camera access to monitor your posture.'" dist/SpineSpy.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" dist/SpineSpy.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${APP_VERSION}" dist/SpineSpy.app/Contents/Info.plist 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_VERSION}" dist/SpineSpy.app/Contents/Info.plist
-          codesign --force --deep --sign - dist/SpineSpy.app
-          codesign --verify --deep --strict --verbose=2 dist/SpineSpy.app
-          mkdir -p dist/dmg
-          cp -r dist/SpineSpy.app dist/dmg/
-          ln -s /Applications dist/dmg/Applications
-          hdiutil create -volname "SpineSpy" -srcfolder dist/dmg -ov -format UDZO SpineSpy.dmg
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
         with:
           name: SpineSpy ${{ github.ref_name }}
           body_path: RELEASE_NOTES.md
           files: SpineSpy.dmg
+
+      - name: Delete temporary keychain
+        if: always()
+        run: |
+          if [[ -n "${KEYCHAIN_PATH:-}" ]] && [[ -f "$KEYCHAIN_PATH" ]]; then
+            security delete-keychain "$KEYCHAIN_PATH"
+          fi

@@ -3,16 +3,16 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
-from ultralytics import YOLO
 import os
 import sys
 import time
 import threading
-import urllib.request
 import statistics
 import random
 import subprocess
 from collections import Counter
+
+from spinespy.settings import AppSettings, CalibrationSettings, SettingsStore
 
 try:
     from AppKit import (
@@ -80,7 +80,7 @@ def resource_path(relative_path):
     """Get path to resource, works for dev and PyInstaller."""
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
-    return relative_path
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
 
 
 # Icons
@@ -93,6 +93,7 @@ PET_IMAGE_FILES = {
 PET_MESSAGES = {
     "good": "Sitting nice and straight!",
     "bad": "You're being a shrimp, my friend.",
+    "checking": "Camera on briefly. Checking posture...",
     "calibrating": "Hold still. Finding your baseline...",
     "paused": "Taking a posture break.",
 }
@@ -123,22 +124,53 @@ baseline_tilt = 0.0
 effective_slouch_threshold = SLOUCH_THRESHOLD
 effective_tilt_threshold = TILT_THRESHOLD
 
-# Download pose model if needed
-MODEL_PATH = resource_path("pose_landmarker.task")
-MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+POSE_MODEL_PATH = resource_path("pose_landmarker.task")
+PHONE_MODEL_PATH = resource_path("efficientdet_lite0.tflite")
+PHONE_SCORE_THRESHOLD = 0.35
 
-if not os.path.exists(MODEL_PATH):
-    print("Downloading pose model...")
-    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+pose_detector = None
+phone_detector = None
+_detector_lock = threading.Lock()
 
-# MediaPipe setup (new API)
-base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
-options = vision.PoseLandmarkerOptions(base_options=base_options, output_segmentation_masks=False)
-pose_detector = vision.PoseLandmarker.create_from_options(options)
 
-# YOLO setup
-yolo = YOLO(resource_path("yolo26s.pt"))
-PHONE_CLASS_ID = 67
+def _require_model(path, label):
+    if os.path.exists(path):
+        return
+    raise RuntimeError(
+        f"Missing {label} model at {path}. Run ./scripts/download_models.sh, then restart SpineSpy."
+    )
+
+
+def _get_pose_detector():
+    global pose_detector
+    if pose_detector is not None:
+        return pose_detector
+    with _detector_lock:
+        if pose_detector is None:
+            _require_model(POSE_MODEL_PATH, "pose")
+            options = vision.PoseLandmarkerOptions(
+                base_options=python.BaseOptions(model_asset_path=POSE_MODEL_PATH),
+                output_segmentation_masks=False,
+            )
+            pose_detector = vision.PoseLandmarker.create_from_options(options)
+    return pose_detector
+
+
+def _get_phone_detector():
+    global phone_detector
+    if phone_detector is not None:
+        return phone_detector
+    with _detector_lock:
+        if phone_detector is None:
+            _require_model(PHONE_MODEL_PATH, "phone detection")
+            options = vision.ObjectDetectorOptions(
+                base_options=python.BaseOptions(model_asset_path=PHONE_MODEL_PATH),
+                category_allowlist=["cell phone"],
+                max_results=3,
+                score_threshold=PHONE_SCORE_THRESHOLD,
+            )
+            phone_detector = vision.ObjectDetector.create_from_options(options)
+    return phone_detector
 
 
 def camera_permission_hint():
@@ -158,6 +190,11 @@ def open_camera():
     return cv2.VideoCapture(0)
 
 
+def _notify_camera_state(callback, state):
+    if callback is not None:
+        callback(state)
+
+
 def get_posture_metrics(landmarks):
     """Extract forward lean and tilt from landmarks."""
     nose = landmarks[0]
@@ -170,35 +207,41 @@ def get_posture_metrics(landmarks):
     return forward_lean, tilt
 
 
-def calibrate():
+def calibrate(camera_state_callback=None):
     """Capture multiple frames and compute a robust baseline from median metrics."""
     global baseline_lean, baseline_tilt, effective_slouch_threshold, effective_tilt_threshold
+    _notify_camera_state(camera_state_callback, "opening")
     cap = open_camera()
     if not cap.isOpened():
+        _notify_camera_state(camera_state_callback, "off")
         print(f"Calibration failed: camera error. {camera_permission_hint()}")
         return False
 
-    time.sleep(0.5)
-    for _ in range(5):
-        cap.read()
+    _notify_camera_state(camera_state_callback, "on")
+    try:
+        time.sleep(0.5)
+        for _ in range(5):
+            cap.read()
 
-    leans = []
-    tilts = []
-    for _ in range(CALIBRATION_FRAMES):
-        ret, frame = cap.read()
-        if not ret:
-            continue
-        frame = cv2.flip(frame, 1)
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        results = pose_detector.detect(mp_image)
-        if results.pose_landmarks and len(results.pose_landmarks) > 0:
-            lean, tilt = get_posture_metrics(results.pose_landmarks[0])
-            leans.append(lean)
-            tilts.append(tilt)
-        time.sleep(CALIBRATION_INTERVAL)
-
-    cap.release()
+        detector = _get_pose_detector()
+        leans = []
+        tilts = []
+        for _ in range(CALIBRATION_FRAMES):
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            frame = cv2.flip(frame, 1)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            results = detector.detect(mp_image)
+            if results.pose_landmarks and len(results.pose_landmarks) > 0:
+                lean, tilt = get_posture_metrics(results.pose_landmarks[0])
+                leans.append(lean)
+                tilts.append(tilt)
+            time.sleep(CALIBRATION_INTERVAL)
+    finally:
+        cap.release()
+        _notify_camera_state(camera_state_callback, "off")
 
     if len(leans) < CALIBRATION_FRAMES // 2:
         print(f"Calibration failed: only {len(leans)} valid frames (need {CALIBRATION_FRAMES // 2})")
@@ -243,41 +286,53 @@ def check_posture(landmarks):
     return False, None
 
 
+def get_phone_detections(frame):
+    """Return MediaPipe cell-phone detections for a BGR camera frame."""
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+    return _get_phone_detector().detect(mp_image).detections
+
+
 def detect_phone(frame):
-    """Detect phone in frame."""
-    results = yolo(frame, verbose=False)
-    for r in results:
-        for box in r.boxes:
-            class_id = int(box.cls[0])
-            confidence = float(box.conf[0])
-            print(f"  [DEBUG] Detected class_id={class_id}, confidence={confidence:.2f}")
-            if class_id == PHONE_CLASS_ID:
-                print(f"  [DEBUG] ✓ Phone detected! (class {PHONE_CLASS_ID})")
-                return True
-    print(f"  [DEBUG] No phone detected (looking for class {PHONE_CLASS_ID})")
+    """Detect a cell phone in a BGR camera frame using MediaPipe."""
+    for detection in get_phone_detections(frame):
+        if not detection.categories:
+            continue
+        category = detection.categories[0]
+        print(f"  [DEBUG] Detected {category.category_name}, confidence={category.score:.2f}")
+        if category.category_name == "cell phone":
+            print(f"  [DEBUG] ✓ Phone detected! confidence={category.score:.2f}")
+            return True
+    print("  [DEBUG] No phone detected")
     return False
 
 
 SNAPSHOT_FRAMES = 3
 
 
-def take_snapshot(save_debug=False):
+def take_snapshot(save_debug=False, camera_state_callback=None):
     """Capture multiple frames, analyze with majority voting, return result."""
+    _notify_camera_state(camera_state_callback, "opening")
     cap = open_camera()
     if not cap.isOpened():
+        _notify_camera_state(camera_state_callback, "off")
         print(f"Snapshot failed: camera error. {camera_permission_hint()}")
         return None, "Camera error"
 
-    time.sleep(0.5)
-    for _ in range(5):
-        cap.read()
+    _notify_camera_state(camera_state_callback, "on")
+    try:
+        time.sleep(0.5)
+        for _ in range(5):
+            cap.read()
 
-    frames = []
-    for _ in range(SNAPSHOT_FRAMES):
-        ret, frame = cap.read()
-        if ret:
-            frames.append(cv2.flip(frame, 1))
-    cap.release()
+        frames = []
+        for _ in range(SNAPSHOT_FRAMES):
+            ret, frame = cap.read()
+            if ret:
+                frames.append(cv2.flip(frame, 1))
+    finally:
+        cap.release()
+        _notify_camera_state(camera_state_callback, "off")
 
     if not frames:
         return None, "Capture failed"
@@ -286,12 +341,13 @@ def take_snapshot(save_debug=False):
         cv2.imwrite("debug_snapshot.jpg", frames[-1])
         print("Saved debug_snapshot.jpg")
 
+    detector = _get_pose_detector()
     bad_votes = []
     reasons = []
     for frame in frames:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        pose_results = pose_detector.detect(mp_image)
+        pose_results = detector.detect(mp_image)
 
         if pose_results.pose_landmarks and len(pose_results.pose_landmarks) > 0:
             posture_bad, reason = check_posture(pose_results.pose_landmarks[0])
@@ -426,7 +482,7 @@ class FloatingPetPanel:
         return frame.origin.x + frame.size.width - width - 28, frame.origin.y + frame.size.height - height - 28
 
     def set_state(self, state):
-        self.state = state if state in {"good", "bad", "calibrating", "paused"} else "good"
+        self.state = state if state in {"good", "bad", "checking", "calibrating", "paused"} else "good"
         if self.image_view is not None:
             image_path = resource_path(PET_IMAGE_FILES.get(self.state, PET_IMAGE_FILES["good"]))
             self.image_view.setImage_(NSImage.alloc().initWithContentsOfFile_(image_path))
@@ -442,37 +498,56 @@ class FloatingPetPanel:
 
 
 class PostureGuardApp(rumps.App):
-    def __init__(self):
+    def __init__(self, settings_store=None):
+        global baseline_lean, baseline_tilt, effective_slouch_threshold, effective_tilt_threshold
+
         super().__init__(ICON_GOOD, quit_button=None)
+        self.settings_store = settings_store or SettingsStore()
+        settings = self.settings_store.load()
+        if settings.calibration is not None:
+            baseline_lean = settings.calibration.baseline_lean
+            baseline_tilt = settings.calibration.baseline_tilt
+            effective_slouch_threshold = settings.calibration.slouch_threshold
+            effective_tilt_threshold = settings.calibration.tilt_threshold
+
         self.bad_streak = 0
         self.bad_reasons = []
-        self.interval = 60
+        self.interval = settings.interval
         self.paused = False
         self.calibrating = False
-        self.sound_clips_enabled = True
+        self.has_saved_calibration = settings.calibration is not None
+        self.sound_clips_enabled = settings.sound_clips_enabled
         self.pet_panel = FloatingPetPanel()
         self.set_posture_state("good")
         rumps.events.before_start.register(self.pet_panel.show)
 
         self.monitoring_item = rumps.MenuItem("✓ Monitoring", callback=self.toggle_monitoring)
-        self.sound_clips_item = rumps.MenuItem("✓ Sound Clips", callback=self.toggle_sound_clips)
+        sound_title = "✓ Sound Clips" if self.sound_clips_enabled else "Sound Clips (off)"
+        self.sound_clips_item = rumps.MenuItem(sound_title, callback=self.toggle_sound_clips)
+        self.camera_status_item = rumps.MenuItem("Camera: Off")
 
         self.interval_menu = rumps.MenuItem("Interval")
-        self.interval_menu.add(rumps.MenuItem("30 seconds", callback=lambda _: self.set_interval(30)))
-        self.interval_menu.add(rumps.MenuItem("1 minute", callback=lambda _: self.set_interval(60)))
-        self.interval_menu.add(rumps.MenuItem("2 minutes", callback=lambda _: self.set_interval(120)))
-        self.interval_menu.add(rumps.MenuItem("5 minutes", callback=lambda _: self.set_interval(300)))
+        self.interval_items = {
+            30: rumps.MenuItem("30 seconds", callback=lambda _: self.set_interval(30)),
+            60: rumps.MenuItem("1 minute", callback=lambda _: self.set_interval(60)),
+            120: rumps.MenuItem("2 minutes", callback=lambda _: self.set_interval(120)),
+            300: rumps.MenuItem("5 minutes", callback=lambda _: self.set_interval(300)),
+        }
+        for item in self.interval_items.values():
+            self.interval_menu.add(item)
+        self._update_interval_menu()
 
         self.settings_menu = rumps.MenuItem("Settings")
         self.settings_menu.add(self.sound_clips_item)
 
         self.menu = [
             self.monitoring_item,
+            self.camera_status_item,
             self.interval_menu,
             self.settings_menu,
             None,
             rumps.MenuItem("Calibrate", callback=self.run_calibration),
-            rumps.MenuItem("Save Snapshot", callback=lambda _: take_snapshot(save_debug=True)),
+            rumps.MenuItem("Save Snapshot", callback=self.save_snapshot),
             rumps.MenuItem("Test Alert", callback=lambda _: play_alert(self.sound_clips_enabled)),
             rumps.MenuItem("Quit", callback=rumps.quit_application),
         ]
@@ -480,29 +555,83 @@ class PostureGuardApp(rumps.App):
         self.timer = rumps.Timer(self.check_posture, self.interval)
         self.timer.start()
 
-        threading.Thread(target=self._startup_calibration, daemon=True).start()
+        if not self.has_saved_calibration:
+            threading.Thread(target=self._startup_calibration, daemon=True).start()
 
     def set_posture_state(self, state):
         self.pet_panel.set_state(state)
         self.title = {
             "good": ICON_GOOD,
             "bad": ICON_BAD,
+            "checking": "📷",
             "calibrating": "📐",
             "paused": "💤",
         }.get(state, ICON_GOOD)
 
+    def _camera_state_changed(self, state):
+        self.camera_status_item.title = {
+            "opening": "Camera: Opening…",
+            "on": "Camera: On • Capturing",
+            "off": "Camera: Off • Processing locally",
+        }.get(state, "Camera: Off")
+        if state in {"opening", "on"} and not self.calibrating:
+            self.set_posture_state("checking")
+
+    def _camera_processing_finished(self):
+        self.camera_status_item.title = "Camera: Off"
+
+    def _save_settings(self):
+        calibration = None
+        if self.has_saved_calibration:
+            calibration = CalibrationSettings(
+                baseline_lean=baseline_lean,
+                baseline_tilt=baseline_tilt,
+                slouch_threshold=effective_slouch_threshold,
+                tilt_threshold=effective_tilt_threshold,
+            )
+        try:
+            self.settings_store.save(
+                AppSettings(
+                    interval=self.interval,
+                    sound_clips_enabled=self.sound_clips_enabled,
+                    calibration=calibration,
+                )
+            )
+        except OSError as error:
+            print(f"Could not save settings: {error}")
+
+    def _update_interval_menu(self):
+        labels = {30: "30 seconds", 60: "1 minute", 120: "2 minutes", 300: "5 minutes"}
+        for seconds, item in self.interval_items.items():
+            prefix = "✓ " if seconds == self.interval else ""
+            item.title = f"{prefix}{labels[seconds]}"
+
     def _startup_calibration(self):
         rumps.notification("SpineSpy", "Starting up", "Sit with good posture. Auto-calibrating in 3 seconds...")
         time.sleep(3)
+        self._perform_calibration(
+            "Could not detect your pose. Make sure you're visible and well-lit."
+        )
+
+    def _perform_calibration(self, failure_message):
         self.calibrating = True
         self.set_posture_state("calibrating")
         try:
-            if calibrate():
+            try:
+                calibrated = calibrate(camera_state_callback=self._camera_state_changed)
+            except RuntimeError as error:
+                rumps.notification("SpineSpy", "Model missing", str(error))
+                return
+
+            if calibrated:
+                self.has_saved_calibration = True
+                self._save_settings()
                 rumps.notification("SpineSpy", "Calibration complete", "Your good posture baseline has been captured.")
             else:
-                rumps.notification("SpineSpy", "Calibration failed", "Could not detect your pose. Make sure you're visible and well-lit.")
+                rumps.notification("SpineSpy", "Calibration failed", failure_message)
         finally:
             self.calibrating = False
+            self._camera_processing_finished()
             self.set_posture_state("good")
 
     def run_calibration(self, _):
@@ -511,24 +640,25 @@ class PostureGuardApp(rumps.App):
     def _calibrate_with_feedback(self):
         rumps.notification("SpineSpy", "Calibration starting", "Sit in your best posture. Calibration begins in 3 seconds...")
         time.sleep(3)
-        self.calibrating = True
-        self.set_posture_state("calibrating")
-        try:
-            if calibrate():
-                rumps.notification("SpineSpy", "Calibration complete", "Your good posture baseline has been captured.")
-            else:
-                rumps.notification("SpineSpy", "Calibration failed", "Could not detect your pose in enough frames. Make sure you're visible and well-lit.")
-        finally:
-            self.calibrating = False
-            self.set_posture_state("good")
+        self._perform_calibration(
+            "Could not detect your pose in enough frames. Make sure you're visible and well-lit."
+        )
 
     def check_posture(self, _):
         if self.paused or self.calibrating:
             return
 
-        is_bad, reason = take_snapshot()
+        try:
+            is_bad, reason = take_snapshot(camera_state_callback=self._camera_state_changed)
+        except RuntimeError as error:
+            self._camera_processing_finished()
+            self.set_posture_state("good")
+            rumps.notification("SpineSpy", "Model missing", str(error))
+            return
 
         if is_bad is None:
+            self._camera_processing_finished()
+            self.set_posture_state("good")
             print(f"Error: {reason}")
             return
 
@@ -550,6 +680,17 @@ class PostureGuardApp(rumps.App):
             self.bad_reasons = []
             self.set_posture_state("good")
             print("Good posture")
+        self._camera_processing_finished()
+
+    def save_snapshot(self, _):
+        previous_state = self.pet_panel.state
+        try:
+            take_snapshot(save_debug=True, camera_state_callback=self._camera_state_changed)
+        except RuntimeError as error:
+            rumps.notification("SpineSpy", "Model missing", str(error))
+        finally:
+            self._camera_processing_finished()
+            self.set_posture_state(previous_state)
 
     def toggle_monitoring(self, sender):
         self.paused = not self.paused
@@ -559,12 +700,15 @@ class PostureGuardApp(rumps.App):
     def toggle_sound_clips(self, sender):
         self.sound_clips_enabled = not self.sound_clips_enabled
         sender.title = "✓ Sound Clips" if self.sound_clips_enabled else "Sound Clips (off)"
+        self._save_settings()
 
     def set_interval(self, seconds):
         self.interval = seconds
         self.timer.stop()
         self.timer = rumps.Timer(self.check_posture, self.interval)
         self.timer.start()
+        self._update_interval_menu()
+        self._save_settings()
         print(f"Interval set to {seconds}s")
 
 

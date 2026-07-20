@@ -58,10 +58,8 @@ sys.modules["mediapipe.tasks.python"] = mock_python
 mock_vision = MagicMock()
 mock_vision.PoseLandmarkerOptions = MagicMock
 mock_vision.PoseLandmarker.create_from_options = MagicMock()
+mock_vision.ObjectDetectorOptions = MagicMock
+mock_vision.ObjectDetector.create_from_options = MagicMock()
 sys.modules["mediapipe.tasks.python.vision"] = mock_vision
 
 sys.modules["mediapipe"] = mock_mp
-
-# Mock ultralytics
-mock_yolo = MagicMock()
-sys.modules["ultralytics"] = mock_yolo
