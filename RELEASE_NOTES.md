@@ -1,4 +1,4 @@
-# SpineSpy - Unreleased
+# SpineSpy 1.2.2
 
 This release focuses on easier installation, verifiable privacy, and clearer
 camera behavior.
