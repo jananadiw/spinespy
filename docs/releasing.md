@@ -1,29 +1,39 @@
 # Releasing SpineSpy
 
-Official SpineSpy releases are built by `.github/workflows/release.yml`. The
-workflow deliberately fails before building when any signing or notarization
-credential is missing.
+Official SpineSpy releases are built, signed, notarized, and published from the
+maintainer's Mac. The Developer ID private key and Apple credentials remain in
+the local Keychain and are never stored in GitHub.
 
-## Required GitHub Actions secrets
+## One-time notarization setup
 
-- `MACOS_CERTIFICATE_P12`: base64-encoded Developer ID Application certificate
-  and private key in PKCS#12 format
-- `MACOS_CERTIFICATE_PASSWORD`: password used when exporting that PKCS#12 file
-- `KEYCHAIN_PASSWORD`: throwaway password for the temporary CI keychain
-- `APPLE_ID`: Apple account used for notarization
-- `APPLE_APP_PASSWORD`: app-specific password for that Apple account
-- `APPLE_TEAM_ID`: Apple Developer team identifier
+Install a valid Developer ID Application identity in Keychain Access, then save
+the Apple notarization credentials in a local Keychain profile:
 
-The workflow imports the certificate into a temporary keychain, installs the
-locked dependencies, verifies both model checksums, runs the tests, builds a DMG
-under 200 MB, signs the app and DMG, submits the DMG to Apple, staples the
-ticket, and verifies it with `stapler`, `codesign`, and Gatekeeper before it can
-create a GitHub release.
+```bash
+xcrun notarytool store-credentials "spinespy-notary"
+```
 
-## Local verification
+Enter the Apple ID, team ID `FWFFM858T2`, and app-specific password at the
+prompts so the password is not recorded in shell history.
 
-Local builds are intentionally ad hoc signed and cannot be represented as
-notarized:
+## Publish an existing tag
+
+The release script checks out the exact tag in a temporary worktree, installs
+the locked dependencies, downloads the checksum-verified models, runs the test
+suite, and builds a DMG under 200 MB. It signs the app and DMG with the local
+Developer ID identity, submits the DMG to Apple, staples and verifies the
+notarization ticket, runs Gatekeeper assessment, and creates the GitHub release.
+
+```bash
+./scripts/release_local.sh v1.2.2
+```
+
+Set `NOTARY_PROFILE` or `CODESIGN_IDENTITY` only when the local defaults are not
+the intended credentials.
+
+## Development build
+
+Development builds remain ad hoc signed and cannot be represented as notarized:
 
 ```bash
 poetry install --with dev
@@ -32,7 +42,7 @@ poetry install --with dev
 codesign --verify --deep --strict --verbose=2 dist/SpineSpy.app
 ```
 
-After downloading an official release, verify the notarization ticket and
+After downloading an official release, verify its notarization ticket and
 Gatekeeper assessment:
 
 ```bash

@@ -17,10 +17,10 @@ camera behavior.
 
 ## Release verification
 
-Local builds are ad hoc signed and are not notarized. Tagged GitHub releases
-are published only if Developer ID signing, hardened-runtime signing, Apple
-notarization, stapling, and Gatekeeper verification all succeed. See
-`docs/releasing.md` for the required secrets and verification commands.
+Official releases are built and published locally only after Developer ID
+signing, hardened-runtime signing, Apple notarization, stapling, and Gatekeeper
+verification all succeed. Release credentials remain in the maintainer's local
+Keychain. See `docs/releasing.md` for the release and verification commands.
 
 ## Privacy
 

@@ -67,9 +67,9 @@ The build requires Python 3.10 through 3.13 and the verified local model assets
 `dist/SpineSpy.app` and `SpineSpy.dmg`, and fails if the compressed DMG exceeds
 200 MB.
 
-Local builds use an ad hoc signature and are not notarized. Tagged GitHub
-releases fail closed unless Developer ID signing and Apple notarization succeed;
-see [docs/releasing.md](docs/releasing.md).
+Development builds use an ad hoc signature and are not notarized. Official
+releases are signed, notarized, verified, and published locally; see
+[docs/releasing.md](docs/releasing.md).
 
 The app appears as a 🦸 icon in your menubar and shows a small floating posture pet with a state message above your windows. Right-click the menubar icon to:
 - **✓ Monitoring** - Pause/resume monitoring

@@ -7,12 +7,12 @@
 - Impact: Monitoring stays local; source builds download verified models, and packaged builds must include them.
 - Revisit: If a smaller Core ML detector materially improves accuracy or energy use.
 
-## 2026-07-18: Fail closed for official macOS releases
+## 2026-07-20: Keep official macOS release credentials local
 
-- Decision: Publish tagged releases only after Developer ID signing, notarization, stapling, and Gatekeeper verification succeed.
-- Reason: An ad hoc signature must never be presented as a notarized release.
-- Impact: Release CI requires Apple credentials; local builds remain explicitly ad hoc.
-- Revisit: If release authentication moves to App Store Connect API keys.
+- Decision: Sign, notarize, verify, and publish official releases from the maintainer's Mac; keep ordinary CI free of release credentials.
+- Reason: A sole maintainer can protect the Developer ID private key and Apple credentials locally without weakening Gatekeeper verification.
+- Impact: Official releases use `scripts/release_local.sh`; development and CI builds remain explicitly ad hoc.
+- Revisit: When additional maintainers or unattended releases justify secured release automation.
 
 ## 2026-07-18: Persist preferences and calibration locally
 
