@@ -1,8 +1,7 @@
 """Integration tests for snapshot flow."""
 
-from collections import Counter
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 
@@ -20,6 +19,35 @@ class _PetPanelStub:
 
     def show(self):
         pass
+
+
+class _ImmediateFuture:
+    def __init__(self, callback, *args):
+        try:
+            self.value = callback(*args)
+            self.error = None
+        except Exception as error:
+            self.value = None
+            self.error = error
+
+    def result(self):
+        if self.error is not None:
+            raise self.error
+        return self.value
+
+    def add_done_callback(self, callback):
+        callback(self)
+
+
+class _ImmediateExecutor:
+    def __init__(self):
+        self.shutdown_calls = []
+
+    def submit(self, callback, *args):
+        return _ImmediateFuture(callback, *args)
+
+    def shutdown(self, **kwargs):
+        self.shutdown_calls.append(kwargs)
 
 
 class TestOpenCamera:
@@ -205,14 +233,79 @@ class TestTakeSnapshot:
         assert reason == "Good posture"
 
 
+class TestSaveCameraFrame:
+    @patch("menubar_app.cv2.imwrite", return_value=True)
+    @patch("menubar_app.cv2.VideoCapture")
+    def test_saves_one_frame_without_inference(self, mock_cap_class, mock_imwrite):
+        from menubar_app import save_camera_frame
+
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = True
+        mock_cap.read.return_value = (True, frame)
+        mock_cap_class.return_value = mock_cap
+
+        result = save_camera_frame("/tmp/snapshot.jpg")
+
+        assert result.succeeded is True
+        assert result.value == "/tmp/snapshot.jpg"
+        mock_imwrite.assert_called_once()
+        mock_cap.release.assert_called_once()
+
+    @patch("menubar_app.cv2.imwrite", return_value=False)
+    @patch("menubar_app.cv2.VideoCapture")
+    def test_reports_failed_write(self, mock_cap_class, mock_imwrite):
+        from menubar_app import save_camera_frame
+
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = True
+        mock_cap.read.return_value = (
+            True,
+            np.zeros((480, 640, 3), dtype=np.uint8),
+        )
+        mock_cap_class.return_value = mock_cap
+
+        result = save_camera_frame("/tmp/snapshot.jpg")
+
+        assert result.succeeded is False
+        assert "/tmp/snapshot.jpg" in result.message
+
+
+class TestOperationCoordinator:
+    def test_rejects_overlap_and_discards_invalidated_result(self):
+        from menubar_app import OperationCoordinator
+
+        coordinator = OperationCoordinator()
+        token = coordinator.reserve()
+
+        assert token is not None
+        assert coordinator.reserve() is None
+        coordinator.invalidate_result()
+        assert coordinator.finish(token) is False
+        assert coordinator.reserve() is not None
+
+    def test_shutdown_rejects_new_work(self):
+        from menubar_app import OperationCoordinator
+
+        coordinator = OperationCoordinator()
+        coordinator.begin_shutdown()
+
+        assert coordinator.reserve() is None
+
+
 class TestPostureGuardApp:
     def _make_app(self, settings=None):
         from menubar_app import PostureGuardApp
+
         settings_store = MagicMock()
         settings_store.load.return_value = settings or AppSettings()
-        with patch("menubar_app.threading.Thread"), patch("menubar_app.FloatingPetPanel", _PetPanelStub):
-            app = PostureGuardApp(settings_store=settings_store)
+        with patch("menubar_app.FloatingPetPanel", _PetPanelStub):
+            app = PostureGuardApp(
+                settings_store=settings_store,
+                executor=_ImmediateExecutor(),
+            )
             app.timer = MagicMock()
+            app._dispatch_main = lambda callback, *args: callback(*args)
         return app
 
     def test_initializes_floating_pet_panel(self):
@@ -299,7 +392,9 @@ class TestPostureGuardApp:
 
         app.check_posture(None)
 
-        mock_snapshot.assert_called_once_with(camera_state_callback=app._camera_state_changed)
+        assert mock_snapshot.call_count == 1
+        assert callable(mock_snapshot.call_args.kwargs["camera_state_callback"])
+        assert mock_snapshot.call_args.kwargs["cancel_event"] is not None
         mock_alert.assert_not_called()
 
     @patch("menubar_app.take_snapshot")
@@ -319,8 +414,11 @@ class TestPostureGuardApp:
 
     @patch("menubar_app.take_snapshot")
     def test_calibrating_skips_check(self, mock_snapshot):
+        from menubar_app import Operation
+
         app = self._make_app()
-        app.calibrating = True
+        app._operations.reserve()
+        app.active_operation = Operation.CALIBRATING
 
         app.check_posture(None)
         mock_snapshot.assert_not_called()
@@ -360,32 +458,74 @@ class TestPostureGuardApp:
 
     def test_camera_status_is_visible_during_capture_and_processing(self):
         app = self._make_app()
+        token = app._operations.reserve()
 
-        app._camera_state_changed("opening")
+        app._camera_state_changed(token, "opening")
         assert app.camera_status_item.title == "Camera: Opening…"
         assert app.pet_panel.state == "checking"
 
-        app._camera_state_changed("on")
+        app._camera_state_changed(token, "on")
         assert app.camera_status_item.title == "Camera: On • Capturing"
 
-        app._camera_state_changed("off")
+        app._camera_state_changed(token, "off")
         assert app.camera_status_item.title == "Camera: Off • Processing locally"
 
-        app._camera_processing_finished()
+        app._operations.finish(token)
+        app.camera_status_item.title = "Camera: Off"
         assert app.camera_status_item.title == "Camera: Off"
 
     @patch("menubar_app.rumps.notification")
-    @patch("menubar_app.take_snapshot", side_effect=RuntimeError("missing model"))
-    def test_save_snapshot_restores_pet_state_when_model_is_missing(
-        self, mock_snapshot, mock_notification
-    ):
+    @patch("menubar_app.save_camera_frame", side_effect=RuntimeError("write failed"))
+    def test_save_snapshot_reports_worker_failure(self, mock_save, mock_notification):
         app = self._make_app()
         app.set_posture_state("bad")
+        app._choose_snapshot_path = lambda: "/tmp/snapshot.jpg"
 
         app.save_snapshot(None)
 
         assert app.pet_panel.state == "bad"
         assert app.camera_status_item.title == "Camera: Off"
         mock_notification.assert_called_once_with(
-            "SpineSpy", "Model missing", "missing model"
+            "SpineSpy", "Snapshot failed", "write failed"
         )
+
+    @patch("menubar_app.save_camera_frame")
+    def test_save_panel_cancel_does_not_open_camera(self, mock_save):
+        app = self._make_app()
+        app._choose_snapshot_path = lambda: None
+
+        app.save_snapshot(None)
+
+        mock_save.assert_not_called()
+
+    @patch("menubar_app.take_snapshot", return_value=(True, "Slouching (mild)"))
+    def test_pause_discards_active_result(self, mock_snapshot):
+        from menubar_app import Operation, OperationResult
+
+        app = self._make_app()
+        token = app._operations.reserve()
+        app.active_operation = Operation.MONITORING
+        app.toggle_monitoring(app.monitoring_item)
+
+        app._finish_operation(
+            token,
+            app._complete_monitoring,
+            OperationResult(True, value=(True, "Slouching (mild)")),
+        )
+
+        assert app.paused is True
+        assert app.bad_streak == 0
+        assert app.pet_panel.state == "paused"
+
+    @patch("menubar_app.close_detectors")
+    @patch("menubar_app.rumps.quit_application")
+    def test_quit_shuts_down_executor_and_detectors(self, mock_quit, mock_close):
+        app = self._make_app()
+
+        app.quit_app(None)
+
+        assert app._executor.shutdown_calls == [
+            {"wait": True, "cancel_futures": True}
+        ]
+        mock_close.assert_called_once()
+        mock_quit.assert_called_once()

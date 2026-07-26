@@ -8,10 +8,12 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
-opencv-python = "^4.8.0"
+opencv-contrib-python = ">=4.13.0.90,<5.0.0"
 mediapipe = "^0.10.0"
 rumps = "^0.4.0"
 pyobjc-framework-Cocoa = "^12.1"
+pyobjc-framework-UniformTypeIdentifiers = "^12.1"
+pillow = ">=12.3.0,<13.0.0"
 
 [tool.poetry.scripts]
 start = "spinespy.cli:start"
@@ -24,5 +26,7 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "pyinstaller (>=6.18.0,<7.0.0)",
-    "pytest (>=9.0.3,<10.0.0)"
+    "pytest (>=9.0.3,<10.0.0)",
+    "ruff (>=0.14.14,<0.15.0)",
+    "setuptools (>=83.0.0,<84.0.0)"
 ]
