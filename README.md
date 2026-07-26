@@ -62,10 +62,11 @@ poetry install --with dev
 ./build_dmg.sh
 ```
 
-The build requires Python 3.10 through 3.13 and the verified local model assets
-`pose_landmarker.task` and `efficientdet_lite0.tflite`. It outputs
-`dist/SpineSpy.app` and `SpineSpy.dmg`, and fails if the compressed DMG exceeds
-200 MB.
+The reproducible macOS build requires a native Apple Silicon host, Python 3.11,
+Poetry 2.3.1, create-dmg 1.3.0, and the verified local model assets
+`pose_landmarker.task` and `efficientdet_lite0.tflite`. It targets macOS 15,
+outputs `dist/SpineSpy.app` and `SpineSpy.dmg`, and fails if bundle policy
+checks fail or the compressed DMG exceeds 200 MB.
 
 Development builds use an ad hoc signature and are not notarized. Official
 releases are signed, notarized, verified, and published locally; see
@@ -111,9 +112,14 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 
 ## Requirements
 
-- macOS (tested on macOS 10.15+)
-- Python 3.10 through 3.13
-- Webcam
+The official v1.2.2 DMG requires:
+
+- An Apple Silicon Mac
+- macOS 15 or newer
+- A camera
+
+Source execution supports Python 3.10 through 3.13. Reproducible release builds
+use native arm64 Python 3.11.
 
 ## Contributing
 

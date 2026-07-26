@@ -7,11 +7,11 @@
 - Impact: Monitoring stays local; source builds download verified models, and packaged builds must include them.
 - Revisit: If a smaller Core ML detector materially improves accuracy or energy use.
 
-## 2026-07-20: Keep official macOS release credentials local
+## 2026-07-25: Keep official macOS releases local and staged
 
-- Decision: Sign, notarize, verify, and publish official releases from the maintainer's Mac; keep ordinary CI free of release credentials.
-- Reason: A sole maintainer can protect the Developer ID private key and Apple credentials locally without weakening Gatekeeper verification.
-- Impact: Official releases use `scripts/release_local.sh`; development and CI builds remain explicitly ad hoc.
+- Decision: Build exact tags with a pinned arm64 toolchain, sign and notarize locally, verify a downloaded draft on clean macOS 15, then publish it unchanged.
+- Reason: Protect local credentials while proving Gatekeeper and users receive the exact tested artifact.
+- Impact: `scripts/release_local.sh stage` prepares the draft; `publish` requires the clean-machine gate. CI remains ad hoc.
 - Revisit: When additional maintainers or unattended releases justify secured release automation.
 
 ## 2026-07-18: Persist preferences and calibration locally
@@ -21,9 +21,9 @@
 - Impact: Returning users keep their configuration and normally avoid recalibration.
 - Revisit: If desk-profile switching requires multiple named calibrations.
 
-## 2026-07-18: Show exact camera lifecycle state
+## 2026-07-25: Serialize camera work and show its lifecycle
 
-- Decision: Expose opening, capturing, off, and local-processing states in the menubar and floating pet.
-- Reason: Users should be able to distinguish camera access from on-device inference.
-- Impact: Camera use is visible during the brief capture window and explicitly off during processing.
+- Decision: Reserve camera operations through one worker and token, while exposing opening, capturing, off, and local-processing states.
+- Reason: Prevent overlapping camera work and stale UI while letting users distinguish camera access from local inference.
+- Impact: Pause and quit invalidate results; AppKit updates return to the main thread; Save Snapshot uses a separate one-frame path.
 - Revisit: If macOS provides a reliable system camera-usage observer that should replace callbacks.

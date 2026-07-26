@@ -32,3 +32,4 @@ dist/
 *.spec
 *.dmg
 SETUP_SUMMARY.md
+.gstack/
