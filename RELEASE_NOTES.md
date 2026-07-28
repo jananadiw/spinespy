@@ -1,4 +1,4 @@
-# SpineSpy 1.2.3
+# SpineSpy 1.2.4
 
 This release makes camera use predictable, keeps monitoring local, and
 strengthens the complete macOS release pipeline.

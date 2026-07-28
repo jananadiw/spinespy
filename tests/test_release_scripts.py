@@ -78,6 +78,9 @@ def test_release_uses_tag_worktree_notes_and_draft_staging():
 
     assert '--notes-file "$RELEASE_DIR/RELEASE_NOTES.md"' in script
     assert "--draft" in script
+    assert script.index("poetry env use python3.11") < script.index(
+        "poetry install --with dev"
+    )
     assert script.index("xcrun stapler staple") < script.index("FINAL_SHA256=")
     assert script.index("FINAL_SHA256=") < script.index("gh release create")
     assert script.index("gh release download") < script.index(
