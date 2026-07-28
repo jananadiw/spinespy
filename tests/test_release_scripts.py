@@ -110,7 +110,7 @@ def test_build_pins_telemetry_free_vision_stack_and_rejects_uploader():
     build_script = (ROOT / "build_dmg.sh").read_text()
     verifier = (ROOT / "scripts/verify_macos_app.sh").read_text()
 
-    assert '"mediapipe": "0.10.21"' in build_script
+    assert '"mediapipe": "0.10.33"' in build_script
     assert '"opencv-contrib-python": "4.11.0.86"' in build_script
     for package in ("jax", "jaxlib", "scipy", "sentencepiece"):
         assert f"--exclude-module {package}" in build_script

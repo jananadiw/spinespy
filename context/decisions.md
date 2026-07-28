@@ -2,8 +2,8 @@
 
 ## 2026-07-27: Pin the local-only vision stack
 
-- Decision: Pin MediaPipe 0.10.21 and OpenCV 4.11.0.86; keep inference models explicit, checksum-verified build assets.
-- Reason: Newer MediaPipe Tasks wheels include a native metrics uploader, while 0.10.21 keeps monitoring local.
+- Decision: Pin MediaPipe 0.10.33 and OpenCV 4.11.0.86; keep inference models explicit, checksum-verified build assets.
+- Reason: MediaPipe 0.10.33 removes the vulnerable Protobuf dependency and lacks the metrics uploader found in later wheels.
 - Impact: Source support is Python 3.10–3.12; release verification rejects the uploader symbol.
 - Revisit: When a supported MediaPipe release offers a documented telemetry opt-out, or Core ML replaces it.
 
