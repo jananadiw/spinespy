@@ -78,6 +78,9 @@ def test_release_uses_tag_worktree_notes_and_draft_staging():
 
     assert '--notes-file "$RELEASE_DIR/RELEASE_NOTES.md"' in script
     assert "--draft" in script
+    assert script.index("poetry env use python3.11") < script.index(
+        "poetry install --with dev"
+    )
     assert script.index("xcrun stapler staple") < script.index("FINAL_SHA256=")
     assert script.index("FINAL_SHA256=") < script.index("gh release create")
     assert script.index("gh release download") < script.index(
@@ -107,7 +110,7 @@ def test_build_pins_telemetry_free_vision_stack_and_rejects_uploader():
     build_script = (ROOT / "build_dmg.sh").read_text()
     verifier = (ROOT / "scripts/verify_macos_app.sh").read_text()
 
-    assert '"mediapipe": "0.10.21"' in build_script
+    assert '"mediapipe": "0.10.33"' in build_script
     assert '"opencv-contrib-python": "4.11.0.86"' in build_script
     for package in ("jax", "jaxlib", "scipy", "sentencepiece"):
         assert f"--exclude-module {package}" in build_script

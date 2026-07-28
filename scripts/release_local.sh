@@ -105,6 +105,7 @@ git worktree add --detach "$RELEASE_DIR" "$TAG_COMMIT"
 cd "$RELEASE_DIR"
 mkdir -p release-artifacts
 
+poetry env use python3.11
 poetry install --with dev --no-interaction
 ./scripts/download_models.sh
 poetry run pytest -q

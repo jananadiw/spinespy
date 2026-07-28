@@ -48,7 +48,7 @@ from importlib.metadata import version
 import pathlib
 
 expected_versions = {
-    "mediapipe": "0.10.21",
+    "mediapipe": "0.10.33",
     "opencv-contrib-python": "4.11.0.86",
 }
 unexpected = {
