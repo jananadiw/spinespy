@@ -19,6 +19,10 @@ PLIST="$APP_PATH/Contents/Info.plist"
     echo "LSMinimumSystemVersion must be ${EXPECTED_MINIMUM_SYSTEM_VERSION}." >&2
     exit 1
 }
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUseContinuityCameraDeviceType' "$PLIST")" == "true" ]] || {
+    echo "NSCameraUseContinuityCameraDeviceType must be enabled." >&2
+    exit 1
+}
 
 ENTITLEMENTS="$(codesign -d --entitlements :- "$APP_PATH" 2>/dev/null || true)"
 grep -q 'com.apple.security.device.camera' <<<"$ENTITLEMENTS" || {
@@ -42,6 +46,10 @@ fi
 
 MACHO_COUNT=0
 while IFS= read -r -d '' FILE_PATH; do
+    if grep -aFq 'PortableClearcutUploader' "$FILE_PATH"; then
+        echo "MediaPipe telemetry uploader present: ${FILE_PATH}" >&2
+        exit 1
+    fi
     if ! file "$FILE_PATH" | grep -q 'Mach-O'; then
         continue
     fi

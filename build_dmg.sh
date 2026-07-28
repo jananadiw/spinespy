@@ -44,7 +44,24 @@ create-dmg --version 2>&1 | grep -Fq "$EXPECTED_CREATE_DMG_VERSION" || {
 export MACOSX_DEPLOYMENT_TARGET="$MINIMUM_SYSTEM_VERSION"
 
 poetry run python - <<'PY'
+from importlib.metadata import version
 import pathlib
+
+expected_versions = {
+    "mediapipe": "0.10.21",
+    "opencv-contrib-python": "4.11.0.86",
+}
+unexpected = {
+    package: (version(package), expected)
+    for package, expected in expected_versions.items()
+    if version(package) != expected
+}
+if unexpected:
+    details = ", ".join(
+        f"{package}={installed} (expected {expected})"
+        for package, (installed, expected) in unexpected.items()
+    )
+    raise SystemExit(f"Unexpected vision dependency version(s): {details}")
 
 required = (
     "pose_landmarker.task",
@@ -99,6 +116,10 @@ PYINSTALLER_ARGS=(
     --hidden-import mediapipe.tasks.c
     --hidden-import AppKit
     --collect-all mediapipe
+    --exclude-module jax
+    --exclude-module jaxlib
+    --exclude-module scipy
+    --exclude-module sentencepiece
     --osx-bundle-identifier com.jananadiw.spinespy
 )
 if [[ "$CODESIGN_IDENTITY" != "-" ]]; then
@@ -111,6 +132,8 @@ PLIST="dist/SpineSpy.app/Contents/Info.plist"
     /usr/libexec/PlistBuddy -c "Set :LSUIElement true" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'SpineSpy uses the camera briefly to check posture and processes frames on this Mac.'" "$PLIST" 2>/dev/null || \
     /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'SpineSpy uses the camera briefly to check posture and processes frames on this Mac.'" "$PLIST"
+/usr/libexec/PlistBuddy -c "Add :NSCameraUseContinuityCameraDeviceType bool true" "$PLIST" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Set :NSCameraUseContinuityCameraDeviceType true" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${APP_VERSION}" "$PLIST" 2>/dev/null || \
     /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_VERSION}" "$PLIST"

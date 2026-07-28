@@ -25,8 +25,9 @@ SpineSpy processes snapshots locally on your device. Camera frames stay in memor
 - **Nudges you when attention drifts** - Spots phone distractions with a lightweight MediaPipe object detector
 - **Smart alerts** - Shows a notification and plays a posture reminder clip after repeated bad posture
 - **Easy to keep out of the way** - Runs from the macOS menubar with a floating posture pet and speech bubble, pause, interval, calibration, and sound toggles
-- **Makes camera use visible** - Shows opening, capturing, off, and local-processing states in the menubar
-- **Remembers your preferences** - Persists the interval, sound setting, and calibration between launches
+- **Keeps camera choice predictable** - Defaults to the Mac's built-in camera and lets you explicitly choose another connected camera
+- **Makes camera use visible** - Shows the selected camera plus opening, capturing, off, and local-processing states in the menubar
+- **Remembers your preferences** - Persists the camera, interval, sound setting, and calibration between launches
 
 ## Setup
 
@@ -76,6 +77,7 @@ The app appears as a 🦸 icon in your menubar and shows a small floating postur
 - **✓ Monitoring** - Pause/resume monitoring
 - **Camera: ...** - See exactly when the camera is opening, capturing, off, or processing locally
 - **Interval** - Change snapshot frequency
+- **Settings → Camera** - Choose a connected camera; changing cameras requires recalibration
 - **Settings → Sound Clips** - Turn posture reminder clips on/off
 - **Calibrate** - Capture your current good-posture baseline
 - **Quit** - Exit the app
@@ -91,7 +93,7 @@ The app appears as a 🦸 icon in your menubar and shows a small floating postur
 
 ## Configuration
 
-Interval, sound, and calibration are saved locally in
+Camera choice, interval, sound, and calibration are saved locally in
 `~/Library/Application Support/SpineSpy/settings.json`. No settings are synced or
 uploaded.
 
@@ -118,7 +120,7 @@ The official v1.2.2 DMG requires:
 - macOS 15 or newer
 - A camera
 
-Source execution supports Python 3.10 through 3.13. Reproducible release builds
+Source execution supports Python 3.10 through 3.12. Reproducible release builds
 use native arm64 Python 3.11.
 
 ## Contributing

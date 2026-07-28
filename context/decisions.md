@@ -1,11 +1,11 @@
 # Decisions
 
-## 2026-07-18: Use MediaPipe for phone detection
+## 2026-07-27: Pin the local-only vision stack
 
-- Decision: Use MediaPipe EfficientDet-Lite0 and keep all inference models explicit, checksum-verified build assets.
-- Reason: Preserve phone detection while keeping the macOS download small and preventing silent runtime downloads.
-- Impact: Monitoring stays local; source builds download verified models, and packaged builds must include them.
-- Revisit: If a smaller Core ML detector materially improves accuracy or energy use.
+- Decision: Pin MediaPipe 0.10.21 and OpenCV 4.11.0.86; keep inference models explicit, checksum-verified build assets.
+- Reason: Newer MediaPipe Tasks wheels include a native metrics uploader, while 0.10.21 keeps monitoring local.
+- Impact: Source support is Python 3.10–3.12; release verification rejects the uploader symbol.
+- Revisit: When a supported MediaPipe release offers a documented telemetry opt-out, or Core ML replaces it.
 
 ## 2026-07-25: Keep official macOS releases local and staged
 
@@ -23,7 +23,7 @@
 
 ## 2026-07-25: Serialize camera work and show its lifecycle
 
-- Decision: Reserve camera operations through one worker and token, while exposing opening, capturing, off, and local-processing states.
-- Reason: Prevent overlapping camera work and stale UI while letting users distinguish camera access from local inference.
-- Impact: Pause and quit invalidate results; AppKit updates return to the main thread; Save Snapshot uses a separate one-frame path.
+- Decision: Serialize camera work, request permission on the main thread, select by AVFoundation ID, and default only to built-in hardware.
+- Reason: Prevent overlap, stale UI, worker-thread permission failures, and unintended Continuity Camera capture.
+- Impact: Users see camera state/name, can persist an explicit external camera, and must recalibrate after switching.
 - Revisit: If macOS provides a reliable system camera-usage observer that should replace callbacks.

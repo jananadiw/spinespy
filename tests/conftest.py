@@ -21,6 +21,14 @@ class _StubMenuItem:
     def add(self, item):
         self._items.append(item)
 
+    def __len__(self):
+        return len(self._items)
+
+    def clear(self):
+        if not self._items:
+            raise AttributeError("submenu has not been created")
+        self._items.clear()
+
 
 class _StubTimer:
     def __init__(self, callback=None, interval=None, **kwargs):

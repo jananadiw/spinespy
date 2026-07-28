@@ -4,8 +4,32 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 
+from spinespy.camera import (
+    BUILT_IN_CAMERA_TYPE,
+    CameraAuthorization,
+    CameraDevice,
+    CameraSelectionError,
+)
 from spinespy.settings import AppSettings, CalibrationSettings
+
+
+BUILTIN_CAMERA = CameraDevice(
+    unique_id="mac-camera",
+    name="FaceTime HD Camera",
+    device_type=BUILT_IN_CAMERA_TYPE,
+    opencv_index=1,
+)
+
+
+@pytest.fixture(autouse=True)
+def _discover_builtin_camera():
+    with patch(
+        "menubar_app.discover_cameras",
+        return_value=(BUILTIN_CAMERA,),
+    ):
+        yield
 
 
 class _PetPanelStub:
@@ -60,7 +84,80 @@ class TestOpenCamera:
         with patch("menubar_app.sys.platform", "darwin"):
             menubar_app.open_camera()
 
+        mock_cap_class.assert_called_once_with(1, 1200)
+
+    @patch("menubar_app.cv2.VideoCapture")
+    def test_uses_explicit_external_camera_on_macos(self, mock_cap_class):
+        import menubar_app
+
+        external = CameraDevice(
+            "iphone-camera",
+            "iPhone Camera",
+            "AVCaptureDeviceTypeExternal",
+            0,
+        )
+        menubar_app.cv2.CAP_AVFOUNDATION = 1200
+
+        with (
+            patch("menubar_app.sys.platform", "darwin"),
+            patch(
+                "menubar_app.discover_cameras",
+                return_value=(external, BUILTIN_CAMERA),
+            ),
+        ):
+            menubar_app.open_camera("iphone-camera")
+
         mock_cap_class.assert_called_once_with(0, 1200)
+
+    @patch("menubar_app.cv2.VideoCapture")
+    def test_refuses_external_only_default(self, mock_cap_class):
+        import menubar_app
+
+        external = CameraDevice(
+            "usb-camera",
+            "USB Camera",
+            "AVCaptureDeviceTypeExternal",
+            0,
+        )
+
+        with (
+            patch("menubar_app.sys.platform", "darwin"),
+            patch("menubar_app.discover_cameras", return_value=(external,)),
+            pytest.raises(CameraSelectionError, match="Choose a camera"),
+        ):
+            menubar_app.open_camera()
+
+        mock_cap_class.assert_not_called()
+
+    @patch("menubar_app.cv2.VideoCapture")
+    def test_releases_capture_if_device_indexes_change_during_open(
+        self, mock_cap_class
+    ):
+        import menubar_app
+
+        mock_capture = mock_cap_class.return_value
+
+        with (
+            patch("menubar_app.sys.platform", "darwin"),
+            patch(
+                "menubar_app.discover_cameras",
+                side_effect=[
+                    (BUILTIN_CAMERA,),
+                    (
+                        CameraDevice(
+                            "different-camera",
+                            "Different Camera",
+                            BUILT_IN_CAMERA_TYPE,
+                            0,
+                        ),
+                    ),
+                ],
+            ),
+            pytest.raises(CameraSelectionError, match="camera list changed"),
+        ):
+            menubar_app.open_camera()
+
+        mock_capture.release.assert_called_once()
 
 
 class TestDetectPhone:
@@ -294,7 +391,7 @@ class TestOperationCoordinator:
 
 
 class TestPostureGuardApp:
-    def _make_app(self, settings=None):
+    def _make_app(self, settings=None, bypass_camera_permission=True):
         from menubar_app import PostureGuardApp
 
         settings_store = MagicMock()
@@ -306,6 +403,10 @@ class TestPostureGuardApp:
             )
             app.timer = MagicMock()
             app._dispatch_main = lambda callback, *args: callback(*args)
+            if bypass_camera_permission:
+                app._with_camera_access = (
+                    lambda action, notify_on_denial: (action(), True)[1]
+                )
         return app
 
     def test_initializes_floating_pet_panel(self):
@@ -395,6 +496,7 @@ class TestPostureGuardApp:
         assert mock_snapshot.call_count == 1
         assert callable(mock_snapshot.call_args.kwargs["camera_state_callback"])
         assert mock_snapshot.call_args.kwargs["cancel_event"] is not None
+        assert mock_snapshot.call_args.kwargs["camera_unique_id"] is None
         mock_alert.assert_not_called()
 
     @patch("menubar_app.take_snapshot")
@@ -439,6 +541,7 @@ class TestPostureGuardApp:
             AppSettings(
                 interval=120,
                 sound_clips_enabled=False,
+                camera_unique_id="mac-camera",
                 calibration=CalibrationSettings(
                     baseline_lean=0.11,
                     baseline_tilt=0.02,
@@ -450,6 +553,7 @@ class TestPostureGuardApp:
 
         assert app.interval == 120
         assert app.sound_clips_enabled is False
+        assert app.camera_unique_id == "mac-camera"
         assert app.has_saved_calibration is True
         assert app.sound_clips_item.title == "Sound Clips (off)"
         assert app.interval_items[120].title == "✓ 2 minutes"
@@ -461,18 +565,21 @@ class TestPostureGuardApp:
         token = app._operations.reserve()
 
         app._camera_state_changed(token, "opening")
-        assert app.camera_status_item.title == "Camera: Opening…"
+        assert app.camera_status_item.title == "Camera: Opening… • FaceTime HD Camera"
         assert app.pet_panel.state == "checking"
 
         app._camera_state_changed(token, "on")
-        assert app.camera_status_item.title == "Camera: On • Capturing"
+        assert app.camera_status_item.title == "Camera: On • FaceTime HD Camera"
 
         app._camera_state_changed(token, "off")
-        assert app.camera_status_item.title == "Camera: Off • Processing locally"
+        assert (
+            app.camera_status_item.title
+            == "Camera: Off • Processing locally • FaceTime HD Camera"
+        )
 
         app._operations.finish(token)
-        app.camera_status_item.title = "Camera: Off"
-        assert app.camera_status_item.title == "Camera: Off"
+        app.camera_status_item.title = app._camera_status_title("idle")
+        assert app.camera_status_item.title == "Camera: Off • FaceTime HD Camera"
 
     @patch("menubar_app.rumps.notification")
     @patch("menubar_app.save_camera_frame", side_effect=RuntimeError("write failed"))
@@ -484,10 +591,148 @@ class TestPostureGuardApp:
         app.save_snapshot(None)
 
         assert app.pet_panel.state == "bad"
-        assert app.camera_status_item.title == "Camera: Off"
+        assert app.camera_status_item.title == "Camera: Off • FaceTime HD Camera"
         mock_notification.assert_called_once_with(
             "SpineSpy", "Snapshot failed", "write failed"
         )
+
+    @patch("menubar_app.rumps.notification")
+    def test_switching_camera_clears_calibration_and_persists_selection(
+        self, mock_notification
+    ):
+        external = CameraDevice(
+            "usb-camera",
+            "USB Camera",
+            "AVCaptureDeviceTypeExternal",
+            0,
+        )
+        app = self._make_app(
+            AppSettings(
+                camera_unique_id="mac-camera",
+                calibration=CalibrationSettings(0.1, 0.02, 0.15, 0.08),
+            )
+        )
+        app.available_cameras = (external, BUILTIN_CAMERA)
+
+        with patch(
+            "menubar_app.discover_cameras",
+            return_value=(external, BUILTIN_CAMERA),
+        ):
+            app._select_camera("usb-camera")
+
+        assert app.camera_unique_id == "usb-camera"
+        assert app.has_saved_calibration is False
+        saved = app.settings_store.save.call_args.args[0]
+        assert saved.camera_unique_id == "usb-camera"
+        assert saved.calibration is None
+        mock_notification.assert_called_once()
+
+    @patch("menubar_app.rumps.notification")
+    def test_selecting_implicit_builtin_default_keeps_calibration(
+        self, mock_notification
+    ):
+        app = self._make_app(
+            AppSettings(
+                calibration=CalibrationSettings(0.1, 0.02, 0.15, 0.08),
+            )
+        )
+
+        app._select_camera("mac-camera")
+
+        assert app.camera_unique_id == "mac-camera"
+        assert app.has_saved_calibration is True
+        saved = app.settings_store.save.call_args.args[0]
+        assert saved.calibration is not None
+        mock_notification.assert_called_once_with(
+            "SpineSpy",
+            "Camera selected",
+            "Using FaceTime HD Camera.",
+        )
+
+    @patch("menubar_app.rumps.notification")
+    def test_missing_saved_camera_does_not_fallback_to_builtin(
+        self, mock_notification
+    ):
+        app = self._make_app(AppSettings(camera_unique_id="disconnected-camera"))
+
+        assert app._effective_camera() is None
+        assert "No camera selected" in app.camera_status_item.title
+        assert app.camera_unique_id == "disconnected-camera"
+        mock_notification.assert_not_called()
+
+    @patch("menubar_app.rumps.notification")
+    def test_unavailable_camera_blocks_manual_work_with_actionable_message(
+        self, mock_notification
+    ):
+        app = self._make_app(
+            AppSettings(camera_unique_id="disconnected-camera"),
+            bypass_camera_permission=False,
+        )
+        action = MagicMock()
+
+        assert app._with_camera_access(action, notify_on_denial=True) is False
+
+        action.assert_not_called()
+        mock_notification.assert_called_once_with(
+            "SpineSpy",
+            "Choose a camera",
+            "The selected camera is unavailable. Choose a connected camera in Settings.",
+        )
+
+    @patch("menubar_app.request_camera_access")
+    @patch(
+        "menubar_app.camera_authorization_status",
+        return_value=CameraAuthorization.NOT_DETERMINED,
+    )
+    def test_first_camera_use_waits_for_main_thread_permission(
+        self, mock_status, mock_request
+    ):
+        app = self._make_app(bypass_camera_permission=False)
+        action = MagicMock()
+
+        assert app._with_camera_access(action, notify_on_denial=True) is True
+        action.assert_not_called()
+
+        callback = mock_request.call_args.args[0]
+        callback(True)
+
+        action.assert_called_once()
+        assert app._camera_permission_request_pending is False
+        mock_status.assert_called_once()
+
+    @patch("menubar_app.rumps.notification")
+    @patch(
+        "menubar_app.camera_authorization_status",
+        return_value=CameraAuthorization.DENIED,
+    )
+    def test_denied_camera_access_blocks_manual_operation(
+        self, mock_status, mock_notification
+    ):
+        app = self._make_app(bypass_camera_permission=False)
+        action = MagicMock()
+
+        assert app._with_camera_access(action, notify_on_denial=True) is False
+
+        action.assert_not_called()
+        mock_notification.assert_called_once()
+        mock_status.assert_called_once()
+
+    @patch("menubar_app.request_camera_access")
+    @patch(
+        "menubar_app.camera_authorization_status",
+        return_value=CameraAuthorization.NOT_DETERMINED,
+    )
+    def test_permission_callback_after_quit_is_ignored(
+        self, mock_status, mock_request
+    ):
+        app = self._make_app(bypass_camera_permission=False)
+        action = MagicMock()
+
+        app._with_camera_access(action, notify_on_denial=True)
+        app._is_quitting = True
+        mock_request.call_args.args[0](True)
+
+        action.assert_not_called()
 
     @patch("menubar_app.save_camera_frame")
     def test_save_panel_cancel_does_not_open_camera(self, mock_save):

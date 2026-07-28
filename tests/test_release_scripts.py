@@ -95,6 +95,25 @@ def test_ad_hoc_build_smoke_tests_python_framework_without_weakening_release():
     assert "prohibited disable-library-validation entitlement" in verifier
 
 
+def test_build_declares_and_verifies_continuity_camera_support():
+    build_script = (ROOT / "build_dmg.sh").read_text()
+    verifier = (ROOT / "scripts/verify_macos_app.sh").read_text()
+
+    assert "NSCameraUseContinuityCameraDeviceType" in build_script
+    assert "NSCameraUseContinuityCameraDeviceType must be enabled" in verifier
+
+
+def test_build_pins_telemetry_free_vision_stack_and_rejects_uploader():
+    build_script = (ROOT / "build_dmg.sh").read_text()
+    verifier = (ROOT / "scripts/verify_macos_app.sh").read_text()
+
+    assert '"mediapipe": "0.10.21"' in build_script
+    assert '"opencv-contrib-python": "4.11.0.86"' in build_script
+    for package in ("jax", "jaxlib", "scipy", "sentencepiece"):
+        assert f"--exclude-module {package}" in build_script
+    assert "PortableClearcutUploader" in verifier
+
+
 def test_known_model_unpack_warning_is_allowed():
     validate(
         {

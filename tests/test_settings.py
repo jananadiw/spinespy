@@ -8,6 +8,7 @@ def test_settings_round_trip(tmp_path):
     expected = AppSettings(
         interval=120,
         sound_clips_enabled=False,
+        camera_unique_id="FaceTime-HD-stable-id",
         calibration=CalibrationSettings(
             baseline_lean=0.12,
             baseline_tilt=0.03,
@@ -42,3 +43,13 @@ def test_invalid_values_fall_back_without_discarding_valid_values(tmp_path):
     )
 
     assert SettingsStore(path).load() == AppSettings(sound_clips_enabled=False)
+
+
+def test_invalid_camera_identifier_is_ignored(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(
+        '{"camera_unique_id": "", "interval": 120}',
+        encoding="utf-8",
+    )
+
+    assert SettingsStore(path).load() == AppSettings(interval=120)

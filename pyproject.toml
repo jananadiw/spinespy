@@ -7,11 +7,12 @@ readme = "README.md"
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.14"
-opencv-contrib-python = ">=4.13.0.90,<5.0.0"
-mediapipe = "^0.10.0"
+python = ">=3.10,<3.13"
+opencv-contrib-python = "4.11.0.86"
+mediapipe = "0.10.21"
 rumps = "^0.4.0"
 pyobjc-framework-Cocoa = "^12.1"
+pyobjc-framework-AVFoundation = "^12.1"
 pyobjc-framework-UniformTypeIdentifiers = "^12.1"
 pillow = ">=12.3.0,<13.0.0"
 
