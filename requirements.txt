@@ -1,4 +1,0 @@
-opencv-python>=4.8.0
-mediapipe>=0.10.0
-rumps>=0.4.0
-pyobjc-framework-Cocoa>=12.1,<13.0

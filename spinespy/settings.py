@@ -24,6 +24,7 @@ class CalibrationSettings:
 class AppSettings:
     interval: int = 60
     sound_clips_enabled: bool = True
+    camera_unique_id: str | None = None
     calibration: CalibrationSettings | None = None
 
 
@@ -54,10 +55,19 @@ class SettingsStore:
         if not isinstance(sound_enabled, bool):
             sound_enabled = True
 
+        camera_unique_id = payload.get("camera_unique_id")
+        if (
+            not isinstance(camera_unique_id, str)
+            or not camera_unique_id
+            or len(camera_unique_id) > 512
+        ):
+            camera_unique_id = None
+
         calibration = self._load_calibration(payload.get("calibration"))
         return AppSettings(
             interval=interval,
             sound_clips_enabled=sound_enabled,
+            camera_unique_id=camera_unique_id,
             calibration=calibration,
         )
 
@@ -65,9 +75,10 @@ class SettingsStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = self.path.with_suffix(".tmp")
         payload = {
-            "version": 1,
+            "version": 2,
             "interval": settings.interval,
             "sound_clips_enabled": settings.sound_clips_enabled,
+            "camera_unique_id": settings.camera_unique_id,
             "calibration": asdict(settings.calibration) if settings.calibration else None,
         }
         temporary_path.write_text(

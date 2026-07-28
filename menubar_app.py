@@ -1,6 +1,7 @@
 import rumps
 import cv2
 import mediapipe as mp
+import objc
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 import os
@@ -11,11 +12,32 @@ import statistics
 import random
 import subprocess
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from enum import Enum
 
+from PyObjCTools import AppHelper
+
+from spinespy.camera import (
+    CameraAuthorization,
+    CameraSelectionError,
+    camera_authorization_status,
+    discover_cameras,
+    request_camera_access,
+    select_camera,
+)
 from spinespy.settings import AppSettings, CalibrationSettings, SettingsStore
 
 try:
     from AppKit import (
+        NSAccessibilityPostNotification,
+        NSAccessibilityPostNotificationWithUserInfo,
+        NSAccessibilityAnnouncementKey,
+        NSAccessibilityAnnouncementRequestedNotification,
+        NSAccessibilityPriorityKey,
+        NSAccessibilityPriorityMedium,
+        NSAccessibilityValueChangedNotification,
+        NSApplication,
         NSBackingStoreBuffered,
         NSColor,
         NSFloatingWindowLevel,
@@ -24,7 +46,9 @@ try:
         NSImageScaleProportionallyUpOrDown,
         NSImageView,
         NSMakeRect,
+        NSModalResponseOK,
         NSPanel,
+        NSSavePanel,
         NSScreen,
         NSTextField,
         NSView,
@@ -34,6 +58,7 @@ try:
         NSWindowStyleMaskBorderless,
         NSWindowStyleMaskNonactivatingPanel,
     )
+    from UniformTypeIdentifiers import UTTypeJPEG, UTTypePNG
 except ImportError:
     NSPanel = None
 
@@ -68,6 +93,14 @@ if NSPanel is not None:
             window = self.window()
             if window is not None:
                 window.performWindowDragWithEvent_(event)
+
+        def refreshAppearance(self):
+            if self.layer() is not None:
+                self.layer().setBackgroundColor_(NSColor.controlBackgroundColor().CGColor())
+
+        def viewDidChangeEffectiveAppearance(self):
+            objc.super(DraggablePetBubbleView, self).viewDidChangeEffectiveAppearance()
+            self.refreshAppearance()
 
 
 else:
@@ -133,6 +166,61 @@ phone_detector = None
 _detector_lock = threading.Lock()
 
 
+class Operation(Enum):
+    MONITORING = "monitoring"
+    CALIBRATING = "calibrating"
+    SAVING = "saving"
+
+
+@dataclass(frozen=True)
+class OperationResult:
+    succeeded: bool
+    value: object = None
+    message: str = ""
+
+
+class OperationCoordinator:
+    """Reserve one operation and reject stale results after pause or shutdown."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._next_token = 0
+        self._active_token = None
+        self._accepted_token = None
+        self._shutting_down = False
+
+    def reserve(self):
+        with self._lock:
+            if self._shutting_down or self._active_token is not None:
+                return None
+            self._next_token += 1
+            self._active_token = self._next_token
+            self._accepted_token = self._next_token
+            return self._next_token
+
+    def accepts(self, token):
+        with self._lock:
+            return not self._shutting_down and self._accepted_token == token
+
+    def invalidate_result(self):
+        with self._lock:
+            self._accepted_token = None
+
+    def finish(self, token):
+        with self._lock:
+            accepted = not self._shutting_down and self._accepted_token == token
+            if self._active_token == token:
+                self._active_token = None
+            if self._accepted_token == token:
+                self._accepted_token = None
+            return accepted
+
+    def begin_shutdown(self):
+        with self._lock:
+            self._shutting_down = True
+            self._accepted_token = None
+
+
 def _require_model(path, label):
     if os.path.exists(path):
         return
@@ -173,6 +261,18 @@ def _get_phone_detector():
     return phone_detector
 
 
+def close_detectors():
+    """Close initialized MediaPipe tasks during orderly shutdown."""
+    global pose_detector, phone_detector
+    with _detector_lock:
+        for detector in (pose_detector, phone_detector):
+            close = getattr(detector, "close", None)
+            if close is not None:
+                close()
+        pose_detector = None
+        phone_detector = None
+
+
 def camera_permission_hint():
     """Return an actionable camera-access hint for the current platform."""
     if sys.platform == "darwin":
@@ -183,10 +283,27 @@ def camera_permission_hint():
     return "Camera is unavailable, already in use by another app, or not permitted."
 
 
-def open_camera():
-    """Open the system default camera."""
+def open_camera(camera_unique_id=None):
+    """Open the selected camera, safely defaulting to built-in Mac hardware."""
     if sys.platform == "darwin":
-        return cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
+        device = select_camera(discover_cameras(), camera_unique_id)
+        os.environ["OPENCV_AVFOUNDATION_SKIP_AUTH"] = "1"
+        capture = cv2.VideoCapture(device.opencv_index, cv2.CAP_AVFOUNDATION)
+        current_devices = discover_cameras()
+        current_device = next(
+            (
+                candidate
+                for candidate in current_devices
+                if candidate.opencv_index == device.opencv_index
+            ),
+            None,
+        )
+        if current_device is None or current_device.unique_id != device.unique_id:
+            capture.release()
+            raise CameraSelectionError(
+                "The camera list changed while opening. Check Settings and try again."
+            )
+        return capture
     return cv2.VideoCapture(0)
 
 
@@ -207,12 +324,22 @@ def get_posture_metrics(landmarks):
     return forward_lean, tilt
 
 
-def calibrate(camera_state_callback=None):
+def calibrate(
+    camera_state_callback=None,
+    cancel_event=None,
+    camera_unique_id=None,
+):
     """Capture multiple frames and compute a robust baseline from median metrics."""
     global baseline_lean, baseline_tilt, effective_slouch_threshold, effective_tilt_threshold
     _notify_camera_state(camera_state_callback, "opening")
-    cap = open_camera()
+    try:
+        cap = open_camera(camera_unique_id)
+    except CameraSelectionError as error:
+        _notify_camera_state(camera_state_callback, "off")
+        print(f"Calibration failed: {error}")
+        return False
     if not cap.isOpened():
+        cap.release()
         _notify_camera_state(camera_state_callback, "off")
         print(f"Calibration failed: camera error. {camera_permission_hint()}")
         return False
@@ -227,6 +354,8 @@ def calibrate(camera_state_callback=None):
         leans = []
         tilts = []
         for _ in range(CALIBRATION_FRAMES):
+            if cancel_event is not None and cancel_event.is_set():
+                return False
             ret, frame = cap.read()
             if not ret:
                 continue
@@ -310,11 +439,21 @@ def detect_phone(frame):
 SNAPSHOT_FRAMES = 3
 
 
-def take_snapshot(save_debug=False, camera_state_callback=None):
+def take_snapshot(
+    camera_state_callback=None,
+    cancel_event=None,
+    camera_unique_id=None,
+):
     """Capture multiple frames, analyze with majority voting, return result."""
     _notify_camera_state(camera_state_callback, "opening")
-    cap = open_camera()
+    try:
+        cap = open_camera(camera_unique_id)
+    except CameraSelectionError as error:
+        _notify_camera_state(camera_state_callback, "off")
+        print(f"Snapshot failed: {error}")
+        return None, str(error)
     if not cap.isOpened():
+        cap.release()
         _notify_camera_state(camera_state_callback, "off")
         print(f"Snapshot failed: camera error. {camera_permission_hint()}")
         return None, "Camera error"
@@ -327,6 +466,8 @@ def take_snapshot(save_debug=False, camera_state_callback=None):
 
         frames = []
         for _ in range(SNAPSHOT_FRAMES):
+            if cancel_event is not None and cancel_event.is_set():
+                return None, "Cancelled"
             ret, frame = cap.read()
             if ret:
                 frames.append(cv2.flip(frame, 1))
@@ -336,10 +477,6 @@ def take_snapshot(save_debug=False, camera_state_callback=None):
 
     if not frames:
         return None, "Capture failed"
-
-    if save_debug:
-        cv2.imwrite("debug_snapshot.jpg", frames[-1])
-        print("Saved debug_snapshot.jpg")
 
     detector = _get_pose_detector()
     bad_votes = []
@@ -371,6 +508,51 @@ def take_snapshot(save_debug=False, camera_state_callback=None):
         return True, "Phone detected"
 
     return False, "Good posture"
+
+
+def save_camera_frame(
+    path,
+    camera_state_callback=None,
+    cancel_event=None,
+    camera_unique_id=None,
+):
+    """Capture one frame and save it without running posture or phone inference."""
+    _notify_camera_state(camera_state_callback, "opening")
+    try:
+        cap = open_camera(camera_unique_id)
+    except CameraSelectionError as error:
+        _notify_camera_state(camera_state_callback, "off")
+        return OperationResult(False, message=str(error))
+    if not cap.isOpened():
+        cap.release()
+        _notify_camera_state(camera_state_callback, "off")
+        return OperationResult(False, message=f"Camera error. {camera_permission_hint()}")
+
+    _notify_camera_state(camera_state_callback, "on")
+    try:
+        time.sleep(0.5)
+        for _ in range(5):
+            if cancel_event is not None and cancel_event.is_set():
+                return OperationResult(False, message="Snapshot cancelled.")
+            cap.read()
+        ret, frame = cap.read()
+        if not ret:
+            return OperationResult(False, message="The camera did not return an image.")
+        frame = cv2.flip(frame, 1)
+    finally:
+        cap.release()
+        _notify_camera_state(camera_state_callback, "off")
+
+    if cancel_event is not None and cancel_event.is_set():
+        return OperationResult(False, message="Snapshot cancelled.")
+
+    try:
+        saved = cv2.imwrite(path, frame)
+    except Exception as error:
+        return OperationResult(False, message=f"Could not save {path}: {error}")
+    if not saved:
+        return OperationResult(False, message=f"Could not save {path}.")
+    return OperationResult(True, value=path)
 
 
 def _available_alert_sounds():
@@ -431,9 +613,10 @@ class FloatingPetPanel:
 
         self.bubble_view = DraggablePetBubbleView.alloc().initWithFrame_(bubble_frame)
         self.bubble_view.setWantsLayer_(True)
-        self.bubble_view.layer().setBackgroundColor_(NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.94).CGColor())
+        self.bubble_view.refreshAppearance()
         self.bubble_view.layer().setCornerRadius_(12)
         self.bubble_view.layer().setMasksToBounds_(True)
+        self.bubble_view.setAccessibilityLabel_("SpineSpy posture status")
         self.window.contentView().addSubview_(self.bubble_view)
 
         self.message_field = DraggablePetMessageField.alloc().initWithFrame_(
@@ -444,10 +627,11 @@ class FloatingPetPanel:
         self.message_field.setBordered_(False)
         self.message_field.setBezeled_(False)
         self.message_field.setDrawsBackground_(False)
-        self.message_field.setTextColor_(NSColor.colorWithCalibratedWhite_alpha_(0.12, 1.0))
+        self.message_field.setTextColor_(NSColor.labelColor())
         self.message_field.setFont_(NSFont.systemFontOfSize_(12))
         self.message_field.cell().setWraps_(False)
         self.message_field.cell().setScrollable_(False)
+        self.message_field.setAccessibilityLabel_("Posture status")
         self.bubble_view.addSubview_(self.message_field)
 
         self.image_view = DraggablePetImageView.alloc().initWithFrame_(image_frame)
@@ -487,7 +671,21 @@ class FloatingPetPanel:
             image_path = resource_path(PET_IMAGE_FILES.get(self.state, PET_IMAGE_FILES["good"]))
             self.image_view.setImage_(NSImage.alloc().initWithContentsOfFile_(image_path))
         if self.message_field is not None:
-            self.message_field.setStringValue_(PET_MESSAGES.get(self.state, PET_MESSAGES["good"]))
+            message = PET_MESSAGES.get(self.state, PET_MESSAGES["good"])
+            self.message_field.setStringValue_(message)
+            self.message_field.setAccessibilityValue_(message)
+            NSAccessibilityPostNotification(
+                self.message_field,
+                NSAccessibilityValueChangedNotification,
+            )
+            NSAccessibilityPostNotificationWithUserInfo(
+                self.message_field,
+                NSAccessibilityAnnouncementRequestedNotification,
+                {
+                    NSAccessibilityAnnouncementKey: message,
+                    NSAccessibilityPriorityKey: NSAccessibilityPriorityMedium,
+                },
+            )
 
     def show(self):
         if self.window is None and NSPanel is not None:
@@ -498,7 +696,7 @@ class FloatingPetPanel:
 
 
 class PostureGuardApp(rumps.App):
-    def __init__(self, settings_store=None):
+    def __init__(self, settings_store=None, executor=None):
         global baseline_lean, baseline_tilt, effective_slouch_threshold, effective_tilt_threshold
 
         super().__init__(ICON_GOOD, quit_button=None)
@@ -514,12 +712,27 @@ class PostureGuardApp(rumps.App):
         self.bad_reasons = []
         self.interval = settings.interval
         self.paused = False
-        self.calibrating = False
         self.has_saved_calibration = settings.calibration is not None
         self.sound_clips_enabled = settings.sound_clips_enabled
+        self.camera_unique_id = settings.camera_unique_id
+        self.available_cameras = ()
+        self.last_posture_state = "good"
+        self.active_operation = None
+        self._camera_permission_request_pending = False
+        self._is_quitting = False
+        self._active_cancel_event = threading.Event()
+        self._operations = OperationCoordinator()
+        self._executor = executor or ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="SpineSpyWorker",
+        )
+        self._owns_executor = executor is None
+
         self.pet_panel = FloatingPetPanel()
         self.set_posture_state("good")
         rumps.events.before_start.register(self.pet_panel.show)
+        if not self.has_saved_calibration:
+            rumps.events.before_start.register(self._request_startup_calibration)
 
         self.monitoring_item = rumps.MenuItem("✓ Monitoring", callback=self.toggle_monitoring)
         sound_title = "✓ Sound Clips" if self.sound_clips_enabled else "Sound Clips (off)"
@@ -538,6 +751,9 @@ class PostureGuardApp(rumps.App):
         self._update_interval_menu()
 
         self.settings_menu = rumps.MenuItem("Settings")
+        self.camera_menu = rumps.MenuItem("Camera")
+        self._refresh_camera_menu()
+        self.settings_menu.add(self.camera_menu)
         self.settings_menu.add(self.sound_clips_item)
 
         self.menu = [
@@ -549,16 +765,22 @@ class PostureGuardApp(rumps.App):
             rumps.MenuItem("Calibrate", callback=self.run_calibration),
             rumps.MenuItem("Save Snapshot", callback=self.save_snapshot),
             rumps.MenuItem("Test Alert", callback=lambda _: play_alert(self.sound_clips_enabled)),
-            rumps.MenuItem("Quit", callback=rumps.quit_application),
+            rumps.MenuItem("Quit", callback=self.quit_app),
         ]
 
         self.timer = rumps.Timer(self.check_posture, self.interval)
         self.timer.start()
 
-        if not self.has_saved_calibration:
-            threading.Thread(target=self._startup_calibration, daemon=True).start()
+    @property
+    def calibrating(self):
+        return self.active_operation is Operation.CALIBRATING
+
+    def _dispatch_main(self, callback, *args):
+        AppHelper.callAfter(callback, *args)
 
     def set_posture_state(self, state):
+        if state in {"good", "bad"}:
+            self.last_posture_state = state
         self.pet_panel.set_state(state)
         self.title = {
             "good": ICON_GOOD,
@@ -568,17 +790,215 @@ class PostureGuardApp(rumps.App):
             "paused": "💤",
         }.get(state, ICON_GOOD)
 
-    def _camera_state_changed(self, state):
-        self.camera_status_item.title = {
-            "opening": "Camera: Opening…",
-            "on": "Camera: On • Capturing",
-            "off": "Camera: Off • Processing locally",
-        }.get(state, "Camera: Off")
-        if state in {"opening", "on"} and not self.calibrating:
+    def _render_current_state(self):
+        self.set_posture_state("paused" if self.paused else self.last_posture_state)
+
+    def _camera_state_changed(self, token, state):
+        if not self._operations.accepts(token):
+            return
+        self.camera_status_item.title = self._camera_status_title(state)
+        if state in {"opening", "on"} and self.active_operation is not Operation.CALIBRATING:
             self.set_posture_state("checking")
 
-    def _camera_processing_finished(self):
-        self.camera_status_item.title = "Camera: Off"
+    def _camera_callback(self, token):
+        return lambda state: self._dispatch_main(self._camera_state_changed, token, state)
+
+    def _effective_camera(self):
+        try:
+            return select_camera(self.available_cameras, self.camera_unique_id)
+        except CameraSelectionError:
+            return None
+
+    def _camera_status_title(self, state):
+        device = self._effective_camera()
+        camera_name = device.name if device is not None else "No camera selected"
+        return {
+            "opening": f"Camera: Opening… • {camera_name}",
+            "on": f"Camera: On • {camera_name}",
+            "off": f"Camera: Off • Processing locally • {camera_name}",
+            "idle": f"Camera: Off • {camera_name}",
+        }.get(state, f"Camera: Off • {camera_name}")
+
+    def _refresh_camera_menu(self, _=None):
+        try:
+            self.available_cameras = discover_cameras()
+        except Exception as error:
+            self.available_cameras = ()
+            print(f"Could not discover cameras: {error}")
+
+        if len(self.camera_menu):
+            self.camera_menu.clear()
+        effective = self._effective_camera()
+        if self.camera_unique_id is not None and effective is None:
+            self.camera_menu.add(
+                rumps.MenuItem("Selected camera unavailable", callback=None)
+            )
+            self.camera_menu.add(None)
+
+        if self.available_cameras:
+            for device in self.available_cameras:
+                item = rumps.MenuItem(
+                    device.name,
+                    callback=lambda _, unique_id=device.unique_id: (
+                        self._select_camera(unique_id)
+                    ),
+                )
+                item.state = int(
+                    effective is not None
+                    and device.unique_id == effective.unique_id
+                )
+                self.camera_menu.add(item)
+        else:
+            self.camera_menu.add(rumps.MenuItem("No cameras found", callback=None))
+
+        self.camera_menu.add(None)
+        self.camera_menu.add(
+            rumps.MenuItem("Refresh Camera List", callback=self._refresh_camera_menu)
+        )
+        if hasattr(self, "camera_status_item"):
+            self.camera_status_item.title = self._camera_status_title("idle")
+
+    def _select_camera(self, unique_id):
+        if self.active_operation is not None:
+            rumps.notification(
+                "SpineSpy",
+                "Camera is busy",
+                "Wait for the current camera operation to finish, then try again.",
+            )
+            return
+
+        device = next(
+            (
+                camera
+                for camera in self.available_cameras
+                if camera.unique_id == unique_id
+            ),
+            None,
+        )
+        if device is None:
+            self._refresh_camera_menu()
+            rumps.notification(
+                "SpineSpy",
+                "Camera unavailable",
+                "That camera disconnected. Choose another camera.",
+            )
+            return
+
+        previous_device = self._effective_camera()
+        changed = (
+            previous_device is None
+            or previous_device.unique_id != unique_id
+        )
+        self.camera_unique_id = unique_id
+        if changed:
+            self.has_saved_calibration = False
+        self._save_settings()
+        self._refresh_camera_menu()
+        message = f"Using {device.name}."
+        if changed:
+            message += " Calibrate again for the new camera position."
+        rumps.notification("SpineSpy", "Camera selected", message)
+
+    def _with_camera_access(self, action, notify_on_denial):
+        if self._is_quitting or self._camera_permission_request_pending:
+            return False
+
+        self._refresh_camera_menu()
+        if self._effective_camera() is None:
+            if notify_on_denial:
+                rumps.notification(
+                    "SpineSpy",
+                    "Choose a camera",
+                    "The selected camera is unavailable. Choose a connected camera in Settings.",
+                )
+            return False
+
+        status = camera_authorization_status()
+        if status is CameraAuthorization.AUTHORIZED:
+            action()
+            return True
+        if status is not CameraAuthorization.NOT_DETERMINED:
+            if notify_on_denial:
+                rumps.notification(
+                    "SpineSpy",
+                    "Camera access required",
+                    camera_permission_hint(),
+                )
+            return False
+
+        self._camera_permission_request_pending = True
+
+        def resolved(granted):
+            self._dispatch_main(
+                self._camera_access_resolved,
+                bool(granted),
+                action,
+                notify_on_denial,
+            )
+
+        request_camera_access(resolved)
+        return True
+
+    def _camera_access_resolved(self, granted, action, notify_on_denial):
+        self._camera_permission_request_pending = False
+        if self._is_quitting:
+            return
+        if granted:
+            action()
+        elif notify_on_denial:
+            rumps.notification(
+                "SpineSpy",
+                "Camera access denied",
+                camera_permission_hint(),
+            )
+
+    def _start_operation(self, operation, worker, completion):
+        token = self._operations.reserve()
+        if token is None:
+            return False
+
+        self.active_operation = operation
+        self._active_cancel_event = threading.Event()
+        if operation is Operation.CALIBRATING:
+            self.set_posture_state("calibrating")
+        else:
+            self.set_posture_state("checking")
+
+        try:
+            future = self._executor.submit(
+                worker,
+                token,
+                self._active_cancel_event,
+            )
+        except Exception as error:
+            self._operations.finish(token)
+            self.active_operation = None
+            self._render_current_state()
+            rumps.notification("SpineSpy", "Could not start operation", str(error))
+            return False
+
+        future.add_done_callback(
+            lambda completed: self._operation_done(token, completion, completed)
+        )
+        return True
+
+    def _operation_done(self, token, completion, future):
+        try:
+            result = future.result()
+            if not isinstance(result, OperationResult):
+                result = OperationResult(True, value=result)
+        except Exception as error:
+            result = OperationResult(False, message=str(error))
+        self._dispatch_main(self._finish_operation, token, completion, result)
+
+    def _finish_operation(self, token, completion, result):
+        accepted = self._operations.finish(token)
+        self.active_operation = None
+        self.camera_status_item.title = self._camera_status_title("idle")
+        if not accepted:
+            self._render_current_state()
+            return
+        completion(result)
 
     def _save_settings(self):
         calibration = None
@@ -594,6 +1014,7 @@ class PostureGuardApp(rumps.App):
                 AppSettings(
                     interval=self.interval,
                     sound_clips_enabled=self.sound_clips_enabled,
+                    camera_unique_id=self.camera_unique_id,
                     calibration=calibration,
                 )
             )
@@ -606,60 +1027,96 @@ class PostureGuardApp(rumps.App):
             prefix = "✓ " if seconds == self.interval else ""
             item.title = f"{prefix}{labels[seconds]}"
 
-    def _startup_calibration(self):
-        rumps.notification("SpineSpy", "Starting up", "Sit with good posture. Auto-calibrating in 3 seconds...")
-        time.sleep(3)
-        self._perform_calibration(
-            "Could not detect your pose. Make sure you're visible and well-lit."
-        )
-
-    def _perform_calibration(self, failure_message):
-        self.calibrating = True
-        self.set_posture_state("calibrating")
-        try:
-            try:
-                calibrated = calibrate(camera_state_callback=self._camera_state_changed)
-            except RuntimeError as error:
-                rumps.notification("SpineSpy", "Model missing", str(error))
-                return
-
-            if calibrated:
-                self.has_saved_calibration = True
-                self._save_settings()
-                rumps.notification("SpineSpy", "Calibration complete", "Your good posture baseline has been captured.")
-            else:
-                rumps.notification("SpineSpy", "Calibration failed", failure_message)
-        finally:
-            self.calibrating = False
-            self._camera_processing_finished()
-            self.set_posture_state("good")
+    def _request_startup_calibration(self):
+        self._request_calibration(startup=True)
 
     def run_calibration(self, _):
-        threading.Thread(target=self._calibrate_with_feedback, daemon=True).start()
+        self._request_calibration(startup=False)
 
-    def _calibrate_with_feedback(self):
-        rumps.notification("SpineSpy", "Calibration starting", "Sit in your best posture. Calibration begins in 3 seconds...")
-        time.sleep(3)
-        self._perform_calibration(
-            "Could not detect your pose in enough frames. Make sure you're visible and well-lit."
+    def _request_calibration(self, startup):
+        self._with_camera_access(
+            lambda: self._begin_calibration(startup),
+            notify_on_denial=True,
         )
 
+    def _begin_calibration(self, startup):
+        title = "Starting up" if startup else "Calibration starting"
+        message = (
+            "Sit with good posture. Auto-calibrating in 3 seconds..."
+            if startup
+            else "Sit in your best posture. Calibration begins in 3 seconds..."
+        )
+        failure_message = (
+            "Could not detect your pose. Make sure you're visible and well-lit."
+            if startup
+            else "Could not detect your pose in enough frames. Make sure you're visible and well-lit."
+        )
+
+        def worker(token, cancel_event):
+            if cancel_event.wait(3):
+                return OperationResult(False, message="Calibration cancelled.")
+            calibrated = calibrate(
+                camera_state_callback=self._camera_callback(token),
+                cancel_event=cancel_event,
+                camera_unique_id=self.camera_unique_id,
+            )
+            return OperationResult(calibrated, message=failure_message)
+
+        if self._start_operation(
+            Operation.CALIBRATING,
+            worker,
+            self._complete_calibration,
+        ):
+            rumps.notification("SpineSpy", title, message)
+
+    def _complete_calibration(self, result):
+        if result.succeeded:
+            self.has_saved_calibration = True
+            self._save_settings()
+            rumps.notification(
+                "SpineSpy",
+                "Calibration complete",
+                "Your good posture baseline has been captured.",
+            )
+        else:
+            rumps.notification("SpineSpy", "Calibration failed", result.message)
+        self._render_current_state()
+
     def check_posture(self, _):
-        if self.paused or self.calibrating:
+        if self.paused:
             return
 
-        try:
-            is_bad, reason = take_snapshot(camera_state_callback=self._camera_state_changed)
-        except RuntimeError as error:
-            self._camera_processing_finished()
-            self.set_posture_state("good")
-            rumps.notification("SpineSpy", "Model missing", str(error))
+        self._with_camera_access(
+            self._start_posture_check,
+            notify_on_denial=False,
+        )
+
+    def _start_posture_check(self):
+        def worker(token, cancel_event):
+            value = take_snapshot(
+                camera_state_callback=self._camera_callback(token),
+                cancel_event=cancel_event,
+                camera_unique_id=self.camera_unique_id,
+            )
+            return OperationResult(True, value=value)
+
+        self._start_operation(
+            Operation.MONITORING,
+            worker,
+            self._complete_monitoring,
+        )
+
+    def _complete_monitoring(self, result):
+        if not result.succeeded:
+            rumps.notification("SpineSpy", "Posture check failed", result.message)
+            self._render_current_state()
             return
 
+        is_bad, reason = result.value
         if is_bad is None:
-            self._camera_processing_finished()
-            self.set_posture_state("good")
-            print(f"Error: {reason}")
+            if reason != "Cancelled":
+                print(f"Error: {reason}")
+            self._render_current_state()
             return
 
         if is_bad:
@@ -667,7 +1124,6 @@ class PostureGuardApp(rumps.App):
             self.bad_reasons.append(reason)
             self.set_posture_state("bad")
             print(f"Bad: {reason} (streak: {self.bad_streak}/{BAD_STREAK_LIMIT})")
-
             if self.bad_streak >= BAD_STREAK_LIMIT:
                 reason_counts = Counter(self.bad_reasons)
                 dominant, count = reason_counts.most_common(1)[0]
@@ -680,22 +1136,65 @@ class PostureGuardApp(rumps.App):
             self.bad_reasons = []
             self.set_posture_state("good")
             print("Good posture")
-        self._camera_processing_finished()
+
+    def _choose_snapshot_path(self):
+        application = NSApplication.sharedApplication()
+        application.activateIgnoringOtherApps_(True)
+        panel = NSSavePanel.savePanel()
+        panel.setTitle_("Save SpineSpy Snapshot")
+        panel.setNameFieldStringValue_("SpineSpy Snapshot.jpg")
+        panel.setAllowedContentTypes_([UTTypeJPEG, UTTypePNG])
+        panel.setAllowsOtherFileTypes_(False)
+        if panel.runModal() != NSModalResponseOK:
+            return None
+        path = str(panel.URL().path())
+        if not os.path.splitext(path)[1]:
+            path = f"{path}.jpg"
+        return path
 
     def save_snapshot(self, _):
-        previous_state = self.pet_panel.state
-        try:
-            take_snapshot(save_debug=True, camera_state_callback=self._camera_state_changed)
-        except RuntimeError as error:
-            rumps.notification("SpineSpy", "Model missing", str(error))
-        finally:
-            self._camera_processing_finished()
-            self.set_posture_state(previous_state)
+        path = self._choose_snapshot_path()
+        if path is None:
+            return
+
+        self._with_camera_access(
+            lambda: self._start_snapshot_save(path),
+            notify_on_denial=True,
+        )
+
+    def _start_snapshot_save(self, path):
+        def worker(token, cancel_event):
+            return save_camera_frame(
+                path,
+                camera_state_callback=self._camera_callback(token),
+                cancel_event=cancel_event,
+                camera_unique_id=self.camera_unique_id,
+            )
+
+        self._start_operation(
+            Operation.SAVING,
+            worker,
+            self._complete_snapshot_save,
+        )
+
+    def _complete_snapshot_save(self, result):
+        if result.succeeded:
+            rumps.notification(
+                "SpineSpy",
+                "Snapshot saved",
+                f"Saved to {result.value}",
+            )
+        else:
+            rumps.notification("SpineSpy", "Snapshot failed", result.message)
+        self._render_current_state()
 
     def toggle_monitoring(self, sender):
         self.paused = not self.paused
         sender.title = "Monitoring (paused)" if self.paused else "✓ Monitoring"
-        self.set_posture_state("paused" if self.paused else "good")
+        if self.paused:
+            self._operations.invalidate_result()
+            self._active_cancel_event.set()
+        self._render_current_state()
 
     def toggle_sound_clips(self, sender):
         self.sound_clips_enabled = not self.sound_clips_enabled
@@ -711,9 +1210,20 @@ class PostureGuardApp(rumps.App):
         self._save_settings()
         print(f"Interval set to {seconds}s")
 
+    def quit_app(self, _):
+        self._is_quitting = True
+        self._operations.begin_shutdown()
+        self._active_cancel_event.set()
+        self.timer.stop()
+        self._executor.shutdown(wait=True, cancel_futures=True)
+        close_detectors()
+        rumps.quit_application()
+
 
 def main():
     """CLI/script entrypoint."""
+    if os.environ.get("SPINESPY_IMPORT_SMOKE_TEST") == "1":
+        return
     PostureGuardApp().run()
 
 

@@ -25,8 +25,9 @@ SpineSpy processes snapshots locally on your device. Camera frames stay in memor
 - **Nudges you when attention drifts** - Spots phone distractions with a lightweight MediaPipe object detector
 - **Smart alerts** - Shows a notification and plays a posture reminder clip after repeated bad posture
 - **Easy to keep out of the way** - Runs from the macOS menubar with a floating posture pet and speech bubble, pause, interval, calibration, and sound toggles
-- **Makes camera use visible** - Shows opening, capturing, off, and local-processing states in the menubar
-- **Remembers your preferences** - Persists the interval, sound setting, and calibration between launches
+- **Keeps camera choice predictable** - Defaults to the Mac's built-in camera and lets you explicitly choose another connected camera
+- **Makes camera use visible** - Shows the selected camera plus opening, capturing, off, and local-processing states in the menubar
+- **Remembers your preferences** - Persists the camera, interval, sound setting, and calibration between launches
 
 ## Setup
 
@@ -62,19 +63,21 @@ poetry install --with dev
 ./build_dmg.sh
 ```
 
-The build requires Python 3.10 through 3.13 and the verified local model assets
-`pose_landmarker.task` and `efficientdet_lite0.tflite`. It outputs
-`dist/SpineSpy.app` and `SpineSpy.dmg`, and fails if the compressed DMG exceeds
-200 MB.
+The reproducible macOS build requires a native Apple Silicon host, Python 3.11,
+Poetry 2.3.1, create-dmg 1.3.0, and the verified local model assets
+`pose_landmarker.task` and `efficientdet_lite0.tflite`. It targets macOS 15,
+outputs `dist/SpineSpy.app` and `SpineSpy.dmg`, and fails if bundle policy
+checks fail or the compressed DMG exceeds 200 MB.
 
-Local builds use an ad hoc signature and are not notarized. Tagged GitHub
-releases fail closed unless Developer ID signing and Apple notarization succeed;
-see [docs/releasing.md](docs/releasing.md).
+Development builds use an ad hoc signature and are not notarized. Official
+releases are signed, notarized, verified, and published locally; see
+[docs/releasing.md](docs/releasing.md).
 
 The app appears as a 🦸 icon in your menubar and shows a small floating posture pet with a state message above your windows. Right-click the menubar icon to:
 - **✓ Monitoring** - Pause/resume monitoring
 - **Camera: ...** - See exactly when the camera is opening, capturing, off, or processing locally
 - **Interval** - Change snapshot frequency
+- **Settings → Camera** - Choose a connected camera; changing cameras requires recalibration
 - **Settings → Sound Clips** - Turn posture reminder clips on/off
 - **Calibrate** - Capture your current good-posture baseline
 - **Quit** - Exit the app
@@ -90,7 +93,7 @@ The app appears as a 🦸 icon in your menubar and shows a small floating postur
 
 ## Configuration
 
-Interval, sound, and calibration are saved locally in
+Camera choice, interval, sound, and calibration are saved locally in
 `~/Library/Application Support/SpineSpy/settings.json`. No settings are synced or
 uploaded.
 
@@ -111,9 +114,14 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 
 ## Requirements
 
-- macOS (tested on macOS 10.15+)
-- Python 3.10 through 3.13
-- Webcam
+The official v1.2.3 DMG requires:
+
+- An Apple Silicon Mac
+- macOS 15 or newer
+- A camera
+
+Source execution supports Python 3.10 through 3.12. Reproducible release builds
+use native arm64 Python 3.11.
 
 ## Contributing
 

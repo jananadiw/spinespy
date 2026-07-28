@@ -7,7 +7,7 @@ on:
 
 jobs:
   test-and-package:
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
@@ -23,11 +23,21 @@ jobs:
           python -m pip install "poetry==2.3.1"
           poetry install --with dev --no-interaction
 
+      - name: Install pinned DMG builder
+        run: |
+          brew install create-dmg shellcheck
+          create-dmg --version | grep "1.3.0"
+
+      - name: Run static checks
+        run: |
+          poetry run ruff check .
+          shellcheck build_dmg.sh scripts/release_local.sh scripts/verify_macos_app.sh
+
       - name: Run tests
         run: poetry run pytest -q
 
       - name: Download verified models
         run: ./scripts/download_models.sh
 
-      - name: Build size-gated ad hoc DMG
+      - name: Build policy-checked ad hoc DMG
         run: MAX_DMG_SIZE_MB=200 ./build_dmg.sh
