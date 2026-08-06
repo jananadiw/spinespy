@@ -27,6 +27,7 @@ SpineSpy processes snapshots locally on your device. Camera frames stay in memor
 - **Easy to keep out of the way** - Runs from the macOS menubar with a floating posture pet and speech bubble, pause, interval, calibration, and sound toggles
 - **Keeps camera choice predictable** - Defaults to the Mac's built-in camera and lets you explicitly choose another connected camera
 - **Makes camera use visible** - Shows the selected camera plus opening, capturing, off, and local-processing states in the menubar
+- **Makes every capture predictable** - Shows the exact local time of the next scheduled capture and stops scheduling while paused
 - **Remembers your preferences** - Persists the camera, interval, sound setting, and calibration between launches
 
 ## Setup
@@ -74,7 +75,8 @@ releases are signed, notarized, verified, and published locally; see
 [docs/releasing.md](docs/releasing.md).
 
 The app appears as a 🦸 icon in your menubar and shows a small floating posture pet with a state message above your windows. Right-click the menubar icon to:
-- **✓ Monitoring** - Pause/resume monitoring
+- **Pause Monitoring / Resume Monitoring** - Stop or restart scheduled captures in one click
+- **Next capture: ...** - See the exact local time of the next scheduled capture, or confirm that monitoring is paused
 - **Camera: ...** - See exactly when the camera is opening, capturing, off, or processing locally
 - **Interval** - Change snapshot frequency
 - **Settings → Camera** - Choose a connected camera; changing cameras requires recalibration
@@ -114,7 +116,7 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 
 ## Requirements
 
-The official v1.2.4 DMG requires:
+The official v1.2.5 DMG requires:
 
 - An Apple Silicon Mac
 - macOS 15 or newer

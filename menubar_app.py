@@ -734,7 +734,9 @@ class PostureGuardApp(rumps.App):
         if not self.has_saved_calibration:
             rumps.events.before_start.register(self._request_startup_calibration)
 
-        self.monitoring_item = rumps.MenuItem("✓ Monitoring", callback=self.toggle_monitoring)
+        self.monitoring_item = rumps.MenuItem("Pause Monitoring", callback=self.toggle_monitoring)
+        self.next_capture_at = None
+        self.next_capture_item = rumps.MenuItem("Next capture: Scheduling…")
         sound_title = "✓ Sound Clips" if self.sound_clips_enabled else "Sound Clips (off)"
         self.sound_clips_item = rumps.MenuItem(sound_title, callback=self.toggle_sound_clips)
         self.camera_status_item = rumps.MenuItem("Camera: Off")
@@ -758,6 +760,7 @@ class PostureGuardApp(rumps.App):
 
         self.menu = [
             self.monitoring_item,
+            self.next_capture_item,
             self.camera_status_item,
             self.interval_menu,
             self.settings_menu,
@@ -768,8 +771,7 @@ class PostureGuardApp(rumps.App):
             rumps.MenuItem("Quit", callback=self.quit_app),
         ]
 
-        self.timer = rumps.Timer(self.check_posture, self.interval)
-        self.timer.start()
+        self._start_monitoring_timer()
 
     @property
     def calibrating(self):
@@ -790,6 +792,14 @@ class PostureGuardApp(rumps.App):
             "paused": "💤",
         }.get(state, ICON_GOOD)
 
+    def _render_menu_bar_state(self):
+        if self.paused:
+            self.title = "💤"
+        elif self.active_operation is Operation.CALIBRATING:
+            self.title = "📐"
+        else:
+            self.title = ICON_BAD if self.last_posture_state == "bad" else ICON_GOOD
+
     def _render_current_state(self):
         self.set_posture_state("paused" if self.paused else self.last_posture_state)
 
@@ -797,8 +807,12 @@ class PostureGuardApp(rumps.App):
         if not self._operations.accepts(token):
             return
         self.camera_status_item.title = self._camera_status_title(state)
-        if state in {"opening", "on"} and self.active_operation is not Operation.CALIBRATING:
-            self.set_posture_state("checking")
+        if state in {"opening", "on"}:
+            self.title = "📷"
+            if self.active_operation is not Operation.CALIBRATING:
+                self.pet_panel.set_state("checking")
+        elif state in {"off", "idle"}:
+            self._render_menu_bar_state()
 
     def _camera_callback(self, token):
         return lambda state: self._dispatch_main(self._camera_state_changed, token, state)
@@ -962,7 +976,8 @@ class PostureGuardApp(rumps.App):
         if operation is Operation.CALIBRATING:
             self.set_posture_state("calibrating")
         else:
-            self.set_posture_state("checking")
+            self.pet_panel.set_state("checking")
+            self._render_menu_bar_state()
 
         try:
             future = self._executor.submit(
@@ -1086,6 +1101,8 @@ class PostureGuardApp(rumps.App):
         if self.paused:
             return
 
+        self._schedule_next_capture()
+
         self._with_camera_access(
             self._start_posture_check,
             notify_on_denial=False,
@@ -1190,10 +1207,16 @@ class PostureGuardApp(rumps.App):
 
     def toggle_monitoring(self, sender):
         self.paused = not self.paused
-        sender.title = "Monitoring (paused)" if self.paused else "✓ Monitoring"
         if self.paused:
+            sender.title = "Resume Monitoring"
+            self.timer.stop()
+            self.next_capture_at = None
+            self.next_capture_item.title = "Next capture: Paused"
             self._operations.invalidate_result()
             self._active_cancel_event.set()
+        else:
+            sender.title = "Pause Monitoring"
+            self._start_monitoring_timer()
         self._render_current_state()
 
     def toggle_sound_clips(self, sender):
@@ -1204,11 +1227,27 @@ class PostureGuardApp(rumps.App):
     def set_interval(self, seconds):
         self.interval = seconds
         self.timer.stop()
-        self.timer = rumps.Timer(self.check_posture, self.interval)
-        self.timer.start()
+        if self.paused:
+            self.next_capture_at = None
+            self.next_capture_item.title = "Next capture: Paused"
+        else:
+            self._start_monitoring_timer()
         self._update_interval_menu()
         self._save_settings()
         print(f"Interval set to {seconds}s")
+
+    def _start_monitoring_timer(self):
+        self.timer = rumps.Timer(self.check_posture, self.interval)
+        self.timer.start()
+        self._schedule_next_capture()
+
+    def _schedule_next_capture(self):
+        self.next_capture_at = time.time() + self.interval
+        capture_time = time.strftime(
+            "%I:%M:%S %p",
+            time.localtime(self.next_capture_at),
+        ).lstrip("0")
+        self.next_capture_item.title = f"Next capture: {capture_time}"
 
     def quit_app(self, _):
         self._is_quitting = True
