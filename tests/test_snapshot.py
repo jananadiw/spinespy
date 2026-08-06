@@ -491,9 +491,11 @@ class TestPostureGuardApp:
         mock_snapshot.return_value = (False, "Good posture")
         app = self._make_app()
 
-        app.check_posture(None)
+        with patch("menubar_app.time.time", return_value=500.0):
+            app.check_posture(None)
 
         assert mock_snapshot.call_count == 1
+        assert app.next_capture_at == 500.0 + app.interval
         assert callable(mock_snapshot.call_args.kwargs["camera_state_callback"])
         assert mock_snapshot.call_args.kwargs["cancel_event"] is not None
         assert mock_snapshot.call_args.kwargs["camera_unique_id"] is None
@@ -526,13 +528,45 @@ class TestPostureGuardApp:
         mock_snapshot.assert_not_called()
 
     def test_pause_updates_floating_pet(self):
-        app = self._make_app()
+        with (
+            patch("menubar_app.time.time", side_effect=[100.0, 200.0]),
+            patch("menubar_app.time.strftime", return_value="02:14:30 PM"),
+        ):
+            app = self._make_app()
+            active_timer = app.timer
 
-        app.toggle_monitoring(app.monitoring_item)
-        assert app.pet_panel.state == "paused"
+            assert app.monitoring_item.title == "Pause Monitoring"
+            assert app.next_capture_at == 100.0 + app.interval
+            assert app.next_capture_item.title == "Next capture: 2:14:30 PM"
 
-        app.toggle_monitoring(app.monitoring_item)
-        assert app.pet_panel.state == "good"
+            app.toggle_monitoring(app.monitoring_item)
+            active_timer.stop.assert_called_once()
+            assert app.monitoring_item.title == "Resume Monitoring"
+            assert app.next_capture_at is None
+            assert app.next_capture_item.title == "Next capture: Paused"
+            assert app.pet_panel.state == "paused"
+
+            app.toggle_monitoring(app.monitoring_item)
+            assert app.monitoring_item.title == "Pause Monitoring"
+            assert app.next_capture_at == 200.0 + app.interval
+            assert app.next_capture_item.title == "Next capture: 2:14:30 PM"
+            assert app.pet_panel.state == "good"
+
+    def test_interval_change_reschedules_only_while_monitoring(self):
+        with (
+            patch("menubar_app.time.time", side_effect=[100.0, 200.0]),
+            patch("menubar_app.time.strftime", return_value="03:00:00 PM"),
+        ):
+            app = self._make_app()
+
+            app.set_interval(120)
+            assert app.next_capture_at == 320.0
+            assert app.next_capture_item.title == "Next capture: 3:00:00 PM"
+
+            app.toggle_monitoring(app.monitoring_item)
+            app.set_interval(300)
+            assert app.next_capture_at is None
+            assert app.next_capture_item.title == "Next capture: Paused"
 
     def test_loads_persisted_preferences_and_calibration(self):
         import menubar_app
@@ -561,25 +595,52 @@ class TestPostureGuardApp:
         assert menubar_app.effective_tilt_threshold == 0.07
 
     def test_camera_status_is_visible_during_capture_and_processing(self):
+        from menubar_app import ICON_BAD, ICON_GOOD
+
         app = self._make_app()
         token = app._operations.reserve()
 
         app._camera_state_changed(token, "opening")
         assert app.camera_status_item.title == "Camera: Opening… • FaceTime HD Camera"
         assert app.pet_panel.state == "checking"
+        assert app.title == "📷"
 
         app._camera_state_changed(token, "on")
         assert app.camera_status_item.title == "Camera: On • FaceTime HD Camera"
+        assert app.title == "📷"
 
         app._camera_state_changed(token, "off")
         assert (
             app.camera_status_item.title
             == "Camera: Off • Processing locally • FaceTime HD Camera"
         )
+        assert app.title == ICON_GOOD
 
         app._operations.finish(token)
         app.camera_status_item.title = app._camera_status_title("idle")
         assert app.camera_status_item.title == "Camera: Off • FaceTime HD Camera"
+
+        token = app._operations.reserve()
+        app.last_posture_state = "bad"
+        app._camera_state_changed(token, "on")
+        app._camera_state_changed(token, "off")
+        assert app.title == ICON_BAD
+
+    def test_calibration_shows_camera_icon_only_during_camera_access(self):
+        from menubar_app import Operation
+
+        app = self._make_app()
+        token = app._operations.reserve()
+        app.active_operation = Operation.CALIBRATING
+        app.set_posture_state("calibrating")
+
+        assert app.title == "📐"
+        app._camera_state_changed(token, "on")
+        assert app.title == "📷"
+        assert app.pet_panel.state == "calibrating"
+
+        app._camera_state_changed(token, "off")
+        assert app.title == "📐"
 
     @patch("menubar_app.rumps.notification")
     @patch("menubar_app.save_camera_frame", side_effect=RuntimeError("write failed"))
