@@ -21,9 +21,9 @@
 - Impact: Returning users keep their configuration and normally avoid recalibration.
 - Revisit: If desk-profile switching requires multiple named calibrations.
 
-## 2026-07-25: Serialize camera work and show its lifecycle
+## 2026-08-05: Serialize camera work and make capture timing explicit
 
-- Decision: Serialize camera work, request permission on the main thread, select by AVFoundation ID, and default only to built-in hardware.
-- Reason: Prevent overlap, stale UI, worker-thread permission failures, and unintended Continuity Camera capture.
-- Impact: Users see camera state/name, can persist an explicit external camera, and must recalibrate after switching.
-- Revisit: If macOS provides a reliable system camera-usage observer that should replace callbacks.
+- Decision: Serialize camera work, request permission on the main thread, select by AVFoundation ID, show the next capture time, stop scheduling while paused, and show 📷 only during camera access.
+- Reason: Prevent overlap, stale UI, worker-thread permission failures, unintended Continuity Camera capture, and ambiguous periodic access.
+- Impact: Users can predict and pause captures, distinguish camera access from local processing, persist an explicit external camera, and recalibrate after switching.
+- Revisit: If macOS provides a reliable camera-usage observer or scheduler API that should replace callbacks and local deadlines.
