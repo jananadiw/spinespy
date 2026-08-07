@@ -8,6 +8,7 @@ Brief description of changes.
 - [ ] New feature
 - [ ] Documentation update
 - [ ] Refactoring
+- [ ] Release (increments `pyproject.toml` and updates `RELEASE_NOTES.md`)
 
 ## Testing
 
@@ -18,3 +19,4 @@ How did you test this?
 - [ ] Code runs locally without errors
 - [ ] Self-reviewed my code
 - [ ] Updated documentation if needed
+- [ ] If this is a release, the version and first release-notes heading match

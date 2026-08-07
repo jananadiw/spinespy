@@ -1,0 +1,40 @@
+name: Publish macOS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Draft release tag, for example v1.2.6
+        required: true
+        type: string
+      clean_macos15_validated:
+        description: I tested the exact draft DMG using the clean-macOS checklist
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: spinespy-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: inputs.clean_macos15_validated
+    runs-on: macos-15
+    environment: release-publish
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Verify and publish the unchanged draft
+        shell: bash
+        env:
+          CLEAN_MACOS15_VALIDATED: "yes"
+        run: ./scripts/release_local.sh publish "${{ inputs.tag }}"
