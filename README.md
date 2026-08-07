@@ -71,7 +71,8 @@ outputs `dist/SpineSpy.app` and `SpineSpy.dmg`, and fails if bundle policy
 checks fail or the compressed DMG exceeds 200 MB.
 
 Development builds use an ad hoc signature and are not notarized. Official
-releases are signed, notarized, verified, and published locally; see
+releases are signed, notarized, and staged by GitHub Actions after a version
+bump reaches `main`, then published after clean-Mac validation; see
 [docs/releasing.md](docs/releasing.md).
 
 The app appears as a 🦸 icon in your menubar and shows a small floating posture pet with a state message above your windows. Right-click the menubar icon to:

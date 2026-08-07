@@ -1,63 +1,81 @@
 # Releasing SpineSpy
 
-Official SpineSpy releases are built, signed, notarized, and published from the
-maintainer's Mac. The Developer ID private key and Apple credentials remain in
-the local Keychain and are never stored in GitHub.
+Official SpineSpy releases are built, signed, notarized, and staged by GitHub
+Actions. Publishing remains a separate approval after the exact draft DMG passes
+the clean-Mac checklist.
 
-## One-time notarization setup
+## Release environments and secrets
 
-Install a valid Developer ID Application identity in Keychain Access, then save
-the Apple notarization credentials in a local Keychain profile:
+Create these GitHub environments in the repository settings:
 
-```bash
-xcrun notarytool store-credentials "spinespy-notary"
-```
+- `release-signing` holds the signing and Apple notarization secrets. It does
+  not require a reviewer, so staging starts as soon as a release version reaches
+  `main`.
+- `release-publish` should require a maintainer reviewer. Approval means the
+  exact draft asset passed the clean-macOS test below.
 
-Enter the Apple ID, team ID `FWFFM858T2`, and app-specific password at the
-prompts so the password is not recorded in shell history.
+Add these secrets to `release-signing`:
 
-## Required local toolchain
+- `MACOS_DEVELOPER_ID_P12_BASE64`: base64-encoded Developer ID Application
+  certificate and private key exported as a password-protected `.p12`.
+- `MACOS_DEVELOPER_ID_P12_PASSWORD`: password for that `.p12`.
+- `APPLE_NOTARY_KEY_P8_BASE64`: base64-encoded App Store Connect API key.
+- `APPLE_NOTARY_KEY_ID`: API key ID.
+- `APPLE_NOTARY_ISSUER_ID`: API issuer ID.
 
-Official releases require a native Apple Silicon environment, not Rosetta:
-
-```bash
-python --version       # Python 3.11.x
-poetry --version       # Poetry 2.3.1
-create-dmg --version   # create-dmg 1.3.0
-```
-
-The build targets arm64 and macOS 15. It fails when the interpreter,
-architecture, tool versions, bundle metadata, nested signatures, entitlements,
-or compressed-DMG size do not match release policy.
-
-## Stage an existing tag
-
-Prepare the release commit first. Its tag, package version, bundle version, and
-first release-note heading must all describe the same version. Push the tag,
-then stage it:
+Encode binary credentials without adding line breaks:
 
 ```bash
-./scripts/release_local.sh stage v1.2.3
+base64 -i DeveloperIDApplication.p12 | tr -d '\n'
+base64 -i AuthKey_KEYID.p8 | tr -d '\n'
 ```
 
-The stage command:
+The workflow decodes these only on an ephemeral GitHub-hosted runner, imports
+the certificate into a temporary Keychain, and removes both after the job.
 
-1. Resolves the exact remote tag into a detached temporary worktree.
-2. Installs the locked dependencies and checksum-verified models.
-3. Runs the complete test suite.
-4. Builds the arm64 app with a macOS 15 deployment target.
-5. Signs collected native code and signs the completed app bundle last.
-6. Audits every bundled Mach-O and rejects `get-task-allow`.
-7. Creates and signs the branded DMG.
-8. Submits it with `notarytool`, saves the submission and log, and rejects any
-   unknown notarization issue.
-9. Staples and validates the DMG before calculating its SHA-256 checksum.
-10. Creates a draft GitHub release, uploads the evidence, downloads the DMG
-    again, and verifies that the downloaded bytes match.
+## Start a release
+
+Prepare a PR that:
+
+- increments the version in `pyproject.toml`;
+- starts `RELEASE_NOTES.md` with `# SpineSpy X.Y.Z`; and
+- passes the normal pull-request checks.
+
+When that PR is merged into `main`, `.github/workflows/release.yml` detects the
+version increase. It creates `vX.Y.Z` at the merge commit and then:
+
+1. Installs the pinned arm64 release toolchain on `macos-15`.
+2. Imports the protected credentials into a temporary Keychain.
+3. Installs locked dependencies and checksum-verified models.
+4. Runs the complete test suite.
+5. Builds and signs the arm64 app and DMG.
+6. Audits the app and rejects invalid signatures or entitlements.
+7. Notarizes, staples, and validates the DMG.
+8. Creates a draft GitHub release with its checksum and release evidence.
+9. Downloads the draft asset and verifies the downloaded bytes.
+
+An ordinary PR that does not increase the version does not create a release.
+If staging fails after the tag is created, rerun the failed workflow. It accepts
+an existing tag only when that tag points to the same merge commit and refuses
+to replace an existing GitHub release.
+
+To stage the current version without another version bump, use **Actions →
+Stage macOS release → Run workflow**. This is intended for the first automated
+release or recovery; normal releases should come from versioned PRs.
 
 The known `pose_landmarker.task/pose_detector.tflite` archive-unpacking warning
 is allowed by stable severity, path, and message fields. Any new warning fails
 the release for manual review.
+
+## Local fallback
+
+The same release script can stage an existing tag from an Apple Silicon Mac
+with Python 3.11, Poetry 2.3.1, create-dmg 1.3.0, a Developer ID identity, and a
+`spinespy-notary` Keychain profile:
+
+```bash
+./scripts/release_local.sh stage v1.2.3
+```
 
 ## Clean macOS 15 gate
 
@@ -79,14 +97,17 @@ new signing, notarization, stapling, hashing, and validation cycle.
 
 Only after the clean-machine gate passes:
 
-```bash
-CLEAN_MACOS15_VALIDATED=yes \
-  ./scripts/release_local.sh publish v1.2.3
-```
+1. Open **Actions → Publish macOS release → Run workflow**.
+2. Enter the draft tag.
+3. Check the clean-macOS validation confirmation.
+4. Approve the `release-publish` environment when prompted.
 
-The publish command downloads and verifies the draft DMG again before making
-the release public. Set `NOTARY_PROFILE`, `CODESIGN_IDENTITY`, or
-`EXPECTED_TEAM_ID` only when the documented local defaults are not intended.
+The publish job downloads and verifies the draft DMG again before making the
+release public. The equivalent local fallback is:
+
+```bash
+CLEAN_MACOS15_VALIDATED=yes ./scripts/release_local.sh publish v1.2.3
+```
 
 ## Development build
 

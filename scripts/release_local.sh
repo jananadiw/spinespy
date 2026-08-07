@@ -7,6 +7,12 @@ RELEASE_TAG="${2:-}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-spinespy-notary}"
 EXPECTED_TEAM_ID="${EXPECTED_TEAM_ID:-FWFFM858T2}"
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-Developer ID Application: Chathurika Wedagedara (${EXPECTED_TEAM_ID})}"
+NOTARY_KEYCHAIN="${NOTARY_KEYCHAIN:-}"
+
+NOTARY_CREDENTIAL_ARGS=(--keychain-profile "$NOTARY_PROFILE")
+if [[ -n "$NOTARY_KEYCHAIN" ]]; then
+    NOTARY_CREDENTIAL_ARGS+=(--keychain "$NOTARY_KEYCHAIN")
+fi
 
 usage() {
     echo "Usage:" >&2
@@ -89,7 +95,7 @@ security find-identity -v -p codesigning | grep -Fq "\"${CODESIGN_IDENTITY}\"" |
     echo "Signing identity does not use Team ID ${EXPECTED_TEAM_ID}." >&2
     exit 1
 }
-xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null
+xcrun notarytool history "${NOTARY_CREDENTIAL_ARGS[@]}" >/dev/null
 
 RELEASE_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/spinespy-release.XXXXXX")"
 RELEASE_DIR="${RELEASE_PARENT}/worktree"
@@ -115,7 +121,7 @@ MAX_DMG_SIZE_MB=200 \
     ./build_dmg.sh
 
 xcrun notarytool submit SpineSpy.dmg \
-    --keychain-profile "$NOTARY_PROFILE" \
+    "${NOTARY_CREDENTIAL_ARGS[@]}" \
     --wait \
     --output-format json \
     > release-artifacts/notary-submission.json
@@ -125,7 +131,7 @@ SUBMISSION_ID="$(jq -er '.id' release-artifacts/notary-submission.json)"
     exit 1
 }
 xcrun notarytool log "$SUBMISSION_ID" \
-    --keychain-profile "$NOTARY_PROFILE" \
+    "${NOTARY_CREDENTIAL_ARGS[@]}" \
     release-artifacts/notarization-log.json
 poetry run python scripts/validate_notarization_log.py \
     release-artifacts/notarization-log.json

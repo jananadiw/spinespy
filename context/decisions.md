@@ -7,12 +7,12 @@
 - Impact: Source support is Python 3.10–3.12; release verification rejects the uploader symbol.
 - Revisit: When a supported MediaPipe release offers a documented telemetry opt-out, or Core ML replaces it.
 
-## 2026-07-25: Keep official macOS releases local and staged
+## 2026-08-06: Automate staged macOS releases
 
-- Decision: Build exact tags with a pinned arm64 toolchain, sign and notarize locally, verify a downloaded draft on clean macOS 15, then publish it unchanged.
-- Reason: Protect local credentials while proving Gatekeeper and users receive the exact tested artifact.
-- Impact: `scripts/release_local.sh stage` prepares the draft; `publish` requires the clean-machine gate. CI remains ad hoc.
-- Revisit: When additional maintainers or unattended releases justify secured release automation.
+- Decision: A version bump merged to `main` tags, signs, notarizes, and stages a draft on an ephemeral GitHub macOS runner; publication remains gated by clean-Mac validation.
+- Reason: Remove local release toil without weakening the physical camera, Gatekeeper, and exact-artifact checks.
+- Impact: Signing secrets live in the protected `release-signing` environment; `release-publish` gates publication of the unchanged draft.
+- Revisit: If GitHub-hosted signing is no longer trusted or clean-device testing can be automated safely.
 
 ## 2026-07-18: Persist preferences and calibration locally
 
