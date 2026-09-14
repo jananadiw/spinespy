@@ -75,7 +75,7 @@ releases are signed, notarized, and staged by GitHub Actions after a version
 bump reaches `main`, then published after clean-Mac validation; see
 [docs/releasing.md](docs/releasing.md).
 
-The app appears as a 🦸 icon in your menubar and shows a small floating posture pet with a state message above your windows. Right-click the menubar icon to:
+The app appears as a ferret icon in your menubar and shows a small floating posture pet with a state message above your windows. Right-click the menubar icon to:
 - **Pause Monitoring / Resume Monitoring** - Stop or restart scheduled captures in one click
 - **Next capture: ...** - See the exact local time of the next scheduled capture, or confirm that monitoring is paused
 - **Camera: ...** - See exactly when the camera is opening, capturing, off, or processing locally
@@ -91,7 +91,7 @@ The app appears as a 🦸 icon in your menubar and shows a small floating postur
 2. **MediaPipe Pose** analyzes the image for slouching or tilting relative to your calibrated baseline
 3. A lightweight **MediaPipe EfficientDet-Lite0** model checks for phones in the frame
 4. Camera closes immediately after capture; analysis continues locally with the camera off
-5. Floating pet artwork, speech bubble, and menubar icon update: upright pet/🦸 (good) or curled pet/🧟 (bad posture)
+5. Floating pet artwork, speech bubble, and menubar icon update: ferret pet and menu bar icon (good) or shrimp pet and menu bar icon (bad posture)
 6. After 5 consecutive bad snapshots → shows a notification and plays a random reminder clip if sound clips are enabled
 
 ## Configuration
@@ -117,7 +117,7 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 
 ## Requirements
 
-The official v1.2.5 DMG requires:
+The official v1.2.6 DMG requires:
 
 - An Apple Silicon Mac
 - macOS 15 or newer

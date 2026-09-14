@@ -117,8 +117,8 @@ def resource_path(relative_path):
 
 
 # Icons
-ICON_GOOD = "🦸"
-ICON_BAD = "🧟"
+ICON_GOOD = "assets/menubar/posture-good.png"
+ICON_BAD = "assets/menubar/posture-bad.png"
 PET_IMAGE_FILES = {
     "good": "assets/pets/posture-good.png",
     "bad": "assets/pets/posture-bad.png",
@@ -699,7 +699,8 @@ class PostureGuardApp(rumps.App):
     def __init__(self, settings_store=None, executor=None):
         global baseline_lean, baseline_tilt, effective_slouch_threshold, effective_tilt_threshold
 
-        super().__init__(ICON_GOOD, quit_button=None)
+        super().__init__("SpineSpy", title="", icon=resource_path(ICON_GOOD),
+                         template=False, quit_button=None)
         self.settings_store = settings_store or SettingsStore()
         settings = self.settings_store.load()
         if settings.calibration is not None:
@@ -784,21 +785,27 @@ class PostureGuardApp(rumps.App):
         if state in {"good", "bad"}:
             self.last_posture_state = state
         self.pet_panel.set_state(state)
-        self.title = {
-            "good": ICON_GOOD,
-            "bad": ICON_BAD,
-            "checking": "📷",
-            "calibrating": "📐",
-            "paused": "💤",
-        }.get(state, ICON_GOOD)
+        self._set_menu_bar_state(state)
+
+    def _set_menu_bar_state(self, state):
+        if state in {"good", "bad"}:
+            self.title = ""
+            self.icon = resource_path(ICON_BAD if state == "bad" else ICON_GOOD)
+        else:
+            self.icon = None
+            self.title = {
+                "checking": "📷",
+                "calibrating": "📐",
+                "paused": "💤",
+            }.get(state, "")
 
     def _render_menu_bar_state(self):
         if self.paused:
-            self.title = "💤"
+            self._set_menu_bar_state("paused")
         elif self.active_operation is Operation.CALIBRATING:
-            self.title = "📐"
+            self._set_menu_bar_state("calibrating")
         else:
-            self.title = ICON_BAD if self.last_posture_state == "bad" else ICON_GOOD
+            self._set_menu_bar_state(self.last_posture_state)
 
     def _render_current_state(self):
         self.set_posture_state("paused" if self.paused else self.last_posture_state)
@@ -808,7 +815,7 @@ class PostureGuardApp(rumps.App):
             return
         self.camera_status_item.title = self._camera_status_title(state)
         if state in {"opening", "on"}:
-            self.title = "📷"
+            self._set_menu_bar_state("checking")
             if self.active_operation is not Operation.CALIBRATING:
                 self.pet_panel.set_state("checking")
         elif state in {"off", "idle"}:
