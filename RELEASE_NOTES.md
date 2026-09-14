@@ -1,9 +1,8 @@
-# SpineSpy 1.2.6
+# SpineSpy 1.2.7
 
-SpineSpy now uses matching ferret and shrimp artwork in the menu bar and floating pet.
+SpineSpy now uses the good-posture ferret as its macOS app icon.
 
-- Replaces the superhero and zombie menu bar emoji with custom color icons: an upright ferret for good posture and a curled shrimp for bad posture.
-- Refreshes the floating pets with transparent ferret and shrimp illustrations.
-- Keeps the camera, calibration, and pause indicators visible during their respective states, then restores the posture icon.
+- Replaces the previous app icon with the transparent ferret artwork, fitted to a square canvas without stretching.
+- Uses the same ferret icon for the installer disk image.
 
-Posture detection, capture scheduling, and local-only processing are unchanged.
+The ferret and shrimp menu bar icons and floating pets introduced in 1.2.6 remain unchanged, along with posture detection, capture scheduling, and local-only processing.
