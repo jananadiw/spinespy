@@ -7,8 +7,9 @@ mock_rumps = MagicMock()
 
 
 class _StubApp:
-    def __init__(self, title=None, **kwargs):
+    def __init__(self, name, title=None, icon=None, **kwargs):
         self.title = title
+        self.icon = icon
         self.menu = []
 
 

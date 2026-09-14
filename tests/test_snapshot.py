@@ -410,20 +410,25 @@ class TestPostureGuardApp:
         return app
 
     def test_initializes_floating_pet_panel(self):
-        from menubar_app import ICON_GOOD
+        from menubar_app import ICON_GOOD, resource_path
 
         app = self._make_app()
 
         assert app.pet_panel.state == "good"
         assert app.pet_panel.state_changes == ["good"]
-        assert app.title == ICON_GOOD
+        assert app.title == ""
+        assert app.icon == resource_path(ICON_GOOD)
 
     def test_pet_image_assets_are_bundled(self):
         import menubar_app
 
         app_root = Path(menubar_app.__file__).resolve().parent
 
-        for relative_path in menubar_app.PET_IMAGE_FILES.values():
+        for relative_path in (
+            *menubar_app.PET_IMAGE_FILES.values(),
+            menubar_app.ICON_GOOD,
+            menubar_app.ICON_BAD,
+        ):
             assert (app_root / relative_path).is_file()
 
     def test_pet_states_have_messages(self):
@@ -455,7 +460,7 @@ class TestPostureGuardApp:
     @patch("menubar_app.take_snapshot")
     @patch("menubar_app.play_alert")
     def test_bad_posture_updates_floating_pet(self, mock_alert, mock_snapshot):
-        from menubar_app import ICON_BAD
+        from menubar_app import ICON_BAD, resource_path
 
         mock_snapshot.return_value = (True, "Slouching (moderate)")
         app = self._make_app()
@@ -463,7 +468,8 @@ class TestPostureGuardApp:
         app.check_posture(None)
 
         assert app.pet_panel.state == "bad"
-        assert app.title == ICON_BAD
+        assert app.title == ""
+        assert app.icon == resource_path(ICON_BAD)
         mock_alert.assert_not_called()
 
     @patch("menubar_app.take_snapshot")
@@ -595,7 +601,7 @@ class TestPostureGuardApp:
         assert menubar_app.effective_tilt_threshold == 0.07
 
     def test_camera_status_is_visible_during_capture_and_processing(self):
-        from menubar_app import ICON_BAD, ICON_GOOD
+        from menubar_app import ICON_BAD, ICON_GOOD, resource_path
 
         app = self._make_app()
         token = app._operations.reserve()
@@ -604,17 +610,20 @@ class TestPostureGuardApp:
         assert app.camera_status_item.title == "Camera: Opening… • FaceTime HD Camera"
         assert app.pet_panel.state == "checking"
         assert app.title == "📷"
+        assert app.icon is None
 
         app._camera_state_changed(token, "on")
         assert app.camera_status_item.title == "Camera: On • FaceTime HD Camera"
         assert app.title == "📷"
+        assert app.icon is None
 
         app._camera_state_changed(token, "off")
         assert (
             app.camera_status_item.title
             == "Camera: Off • Processing locally • FaceTime HD Camera"
         )
-        assert app.title == ICON_GOOD
+        assert app.title == ""
+        assert app.icon == resource_path(ICON_GOOD)
 
         app._operations.finish(token)
         app.camera_status_item.title = app._camera_status_title("idle")
@@ -624,7 +633,8 @@ class TestPostureGuardApp:
         app.last_posture_state = "bad"
         app._camera_state_changed(token, "on")
         app._camera_state_changed(token, "off")
-        assert app.title == ICON_BAD
+        assert app.title == ""
+        assert app.icon == resource_path(ICON_BAD)
 
     def test_calibration_shows_camera_icon_only_during_camera_access(self):
         from menubar_app import Operation
@@ -635,12 +645,15 @@ class TestPostureGuardApp:
         app.set_posture_state("calibrating")
 
         assert app.title == "📐"
+        assert app.icon is None
         app._camera_state_changed(token, "on")
         assert app.title == "📷"
+        assert app.icon is None
         assert app.pet_panel.state == "calibrating"
 
         app._camera_state_changed(token, "off")
         assert app.title == "📐"
+        assert app.icon is None
 
     @patch("menubar_app.rumps.notification")
     @patch("menubar_app.save_camera_frame", side_effect=RuntimeError("write failed"))

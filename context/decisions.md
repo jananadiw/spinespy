@@ -1,7 +1,5 @@
 # Decisions
-
 ## 2026-07-27: Pin the local-only vision stack
-
 - Decision: Pin MediaPipe 0.10.33 and OpenCV 4.11.0.86; keep inference models explicit, checksum-verified build assets.
 - Reason: MediaPipe 0.10.33 removes the vulnerable Protobuf dependency and lacks the metrics uploader found in later wheels.
 - Impact: Source support is Python 3.10–3.12; release verification rejects the uploader symbol.
@@ -27,3 +25,5 @@
 - Reason: Prevent overlap, stale UI, worker-thread permission failures, unintended Continuity Camera capture, and ambiguous periodic access.
 - Impact: Users can predict and pause captures, distinguish camera access from local processing, persist an explicit external camera, and recalibrate after switching.
 - Revisit: If macOS provides a reliable camera-usage observer or scheduler API that should replace callbacks and local deadlines.
+
+- 2026-09-13: Use custom color ferret/shrimp menu bar icons to match posture pets; retain temporary status emoji. Bundle transparent PNGs and clear them for temporary states. Revisit if small-size legibility requires silhouettes.
