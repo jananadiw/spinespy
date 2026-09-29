@@ -34,7 +34,8 @@ def _discover_builtin_camera():
 
 
 class _PetPanelStub:
-    def __init__(self):
+    def __init__(self, on_quit):
+        self.on_quit = on_quit
         self.state = None
         self.state_changes = []
 
@@ -422,6 +423,7 @@ class TestPostureGuardApp:
 
         assert app.pet_panel.state == "good"
         assert app.pet_panel.state_changes == ["good"]
+        assert app.pet_panel.on_quit == app.quit_app
         assert app.title == ""
         assert app.icon == resource_path(ICON_GOOD)
 

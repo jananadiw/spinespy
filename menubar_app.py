@@ -54,7 +54,10 @@ try:
         NSImageScaleProportionallyUpOrDown,
         NSImageView,
         NSMakeRect,
+        NSMenu,
+        NSMenuItem,
         NSModalResponseOK,
+        NSEventModifierFlagControl,
         NSPanel,
         NSSavePanel,
         NSScreen,
@@ -78,9 +81,18 @@ if NSPanel is not None:
             return True
 
         def mouseDown_(self, event):
+            if event.modifierFlags() & NSEventModifierFlagControl:
+                self.rightMouseDown_(event)
+                return
             window = self.window()
             if window is not None:
                 window.performWindowDragWithEvent_(event)
+
+        def rightMouseDown_(self, event):
+            NSMenu.popUpContextMenu_withEvent_forView_(self.menu(), event, self)
+
+        def quitApp_(self, sender):
+            self._quit_callback(sender)
 
 
     class DraggablePetMessageField(NSTextField):
@@ -588,7 +600,8 @@ def play_alert(enabled=True):
 
 
 class FloatingPetPanel:
-    def __init__(self):
+    def __init__(self, on_quit):
+        self.on_quit = on_quit
         self.state = "good"
         self.window = None
         self.image_view = None
@@ -644,6 +657,14 @@ class FloatingPetPanel:
 
         self.image_view = DraggablePetImageView.alloc().initWithFrame_(image_frame)
         self.image_view.setImageScaling_(NSImageScaleProportionallyUpOrDown)
+        self.image_view._quit_callback = self.on_quit
+        menu = NSMenu.alloc().initWithTitle_("SpineSpy")
+        quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Quit SpineSpy", "quitApp:", ""
+        )
+        quit_item.setTarget_(self.image_view)
+        menu.addItem_(quit_item)
+        self.image_view.setMenu_(menu)
         self.window.contentView().addSubview_(self.image_view)
 
     def _layout(self, height):
@@ -741,7 +762,7 @@ class PostureGuardApp(rumps.App):
         )
         self._owns_executor = executor is None
 
-        self.pet_panel = FloatingPetPanel()
+        self.pet_panel = FloatingPetPanel(on_quit=self.quit_app)
         self.set_posture_state("good")
         rumps.events.before_start.register(self._startup)
 

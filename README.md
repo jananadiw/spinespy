@@ -87,7 +87,7 @@ Camera, sound, and calibration preferences are retained. After saving, reopen
 the window by clicking the menu bar icon and choosing
 **Settings → Welcome to SpineSpy…**. No app deletion or reset is needed.
 
-After setup, the app appears as a ferret icon in your menubar and shows a small floating posture pet with a state message above your windows.
+After setup, the app appears as a ferret icon in your menubar and shows a small floating posture pet with a state message above your windows. Drag the floating pet to move it, or right-click (Control-click) the ferret or shrimp and choose **Quit SpineSpy** to exit the app.
 
 Right-click the menubar icon to:
 - **Pause Monitoring / Resume Monitoring** - Stop or restart scheduled captures in one click
@@ -134,7 +134,7 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 
 ## Requirements
 
-The official v1.3.1 DMG requires:
+The official v1.3.2 DMG requires:
 
 - An Apple Silicon Mac
 - macOS 15 or newer
