@@ -75,10 +75,10 @@ class SettingsStore:
         if not isinstance(primary_need, str) or primary_need not in PRIMARY_NEEDS:
             primary_need = None
         onboarding_completed = (
-            payload.get("onboarding_completed") is True and primary_need is not None
+            payload.get("version") == 4
+            and payload.get("onboarding_completed") is True and primary_need is not None
         )
-        # Existing installs already ran the app before onboarding existed.
-        # Only migrate known old schemas; never override unfinished modern setup.
+        # Offer the welcome screen once on upgrade, retaining existing answers.
         version = payload.get("version")
         if (
             type(version) is int and version in (1, 2)
@@ -86,7 +86,7 @@ class SettingsStore:
             and "onboarding_completed" not in payload
         ):
             primary_need = "posture"
-            onboarding_completed = True
+            onboarding_completed = False
 
         sound_enabled = payload.get("sound_clips_enabled", True)
         if not isinstance(sound_enabled, bool):
@@ -114,7 +114,7 @@ class SettingsStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = self.path.with_suffix(".tmp")
         payload = {
-            "version": 3,
+            "version": 4,
             "interval": settings.interval,
             "sound_clips_enabled": settings.sound_clips_enabled,
             "camera_unique_id": settings.camera_unique_id,

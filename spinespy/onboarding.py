@@ -132,7 +132,7 @@ class WelcomeWindow:
 
         self._label(
             "Brief camera checks. Images processed on your Mac.\n"
-            "Preferences saved locally. No account needed.",
+            "Change answers later: menu bar icon → Settings → Welcome to SpineSpy…",
             (38, 82, 484, 38), 11, secondary=True,
         )
         divider = NSBox.alloc().initWithFrame_(NSMakeRect(38, 70, 484, 1))
@@ -157,6 +157,15 @@ class WelcomeWindow:
         for key, button in zip(PRIMARY_NEEDS, self.need_buttons):
             button.setState_(int(key == primary_need))
         intervals = tuple(INTERVAL_LABELS)
+        if interval is not None and interval not in intervals:
+            intervals = (*intervals, interval)
+        self.intervals = intervals
+        self.interval_control.setSegmentCount_(len(intervals))
+        for index, seconds in enumerate(intervals):
+            label = INTERVAL_LABELS.get(seconds, f"{seconds // 60} minutes")
+            self.interval_control.setLabel_forSegment_(label.replace("minutes", "min"), index)
+            self.interval_control.setWidth_forSegment_(464 / len(intervals), index)
+            self.interval_control.setToolTip_forSegment_(f"Check every {label}", index)
         self.interval_control.setSelectedSegment_(
             intervals.index(interval) if interval in intervals else -1
         )
@@ -191,7 +200,7 @@ class WelcomeWindow:
         index = self.interval_control.selectedSegment()
         if self.primary_need not in PRIMARY_NEEDS or index < 0:
             return
-        if not self.on_complete(self.primary_need, tuple(INTERVAL_LABELS)[index]):
+        if not self.on_complete(self.primary_need, self.intervals[index]):
             self.status_label.setStringValue_("Couldn’t save. Please try again.")
 
     def hide(self):

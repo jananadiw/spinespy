@@ -222,11 +222,15 @@ def test_pause_before_startup_handles_missing_timer(launch):
     app.timer.start.assert_called_once()
 
 
-def test_existing_calibrated_install_starts_without_welcome_and_can_dismiss_settings(launch):
+@pytest.mark.parametrize("version", [1, 2, 3])
+def test_upgrade_shows_welcome_once_and_preserves_preferences(launch, version):
     initial = launch()
     initial.settings_store.path.write_text(json.dumps({
-        "version": 2,
-        "interval": 120,
+        "version": version,
+        "interval": 1200,
+        **({"primary_need": "movement", "onboarding_completed": True}
+           if version == 3 else {}),
+        "sound_clips_enabled": False,
         "camera_unique_id": "my-camera",
         "calibration": {
             "baseline_lean": 0.1, "baseline_tilt": 0.02,
@@ -235,18 +239,23 @@ def test_existing_calibrated_install_starts_without_welcome_and_can_dismiss_sett
     }))
     app = launch()
     app._startup()
-
-    assert app.welcome_window is None
-    assert app.primary_need == "posture"
-    assert app.interval == 600
-    assert app.camera_unique_id == "my-camera"
-    app.pet_panel.show.assert_called_once()
-    app.timer.start.assert_called_once()
-    app._request_startup_calibration.assert_not_called()
-    app.show_welcome()
+    expected_need = "movement" if version == 3 else "posture"
     app.welcome_window.show.assert_called_once_with(
-        primary_need="posture", interval=600, completed=True,
+        primary_need=expected_need, interval=1200, completed=False,
     )
-    with patch.object(app, "quit_app") as quit_app:
-        app._welcome_closed()
-    quit_app.assert_not_called()
+    app.pet_panel.show.assert_not_called()
+    assert app.timer is None
+    assert app._complete_onboarding("movement", 1200)
+    saved = app.settings_store.load()
+    assert saved.camera_unique_id == "my-camera"
+    assert saved.sound_clips_enabled is False
+    assert saved.calibration == CalibrationSettings(0.1, 0.02, 0.15, 0.08)
+    app._request_startup_calibration.assert_not_called()
+    returning = launch()
+    returning._startup()
+    assert returning.welcome_window is None
+    app.welcome_window.show.reset_mock()
+    returning.show_welcome()
+    returning.welcome_window.show.assert_called_once_with(
+        primary_need="movement", interval=1200, completed=True,
+    )

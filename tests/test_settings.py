@@ -83,7 +83,7 @@ def test_legacy_intervals_migrate_to_ten_minutes_without_losing_preferences(tmp_
     assert settings.sound_clips_enabled is False
     assert settings.camera_unique_id == "saved-camera"
     assert settings.calibration == CalibrationSettings(0.12, 0.03, 0.15, 0.08)
-    assert settings.onboarding_completed is True
+    assert settings.onboarding_completed is False
     assert settings.primary_need == "posture"
 
 
@@ -133,9 +133,9 @@ def test_pre_onboarding_settings_migrate_and_survive_a_save(tmp_path, version):
 
     assert migrated == AppSettings(
         interval=600, sound_clips_enabled=False,
-        primary_need="posture", onboarding_completed=True,
+        primary_need="posture", onboarding_completed=False,
     )
-    assert json.loads(path.read_text())["version"] == 3
+    assert json.loads(path.read_text())["version"] == 4
     assert store.load() == migrated
 
 

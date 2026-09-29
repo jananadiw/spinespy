@@ -81,9 +81,11 @@ Choose both answers and click **Get started** to save them locally,
 then begin camera permission and calibration. Closing the window before finishing
 quits the app without starting monitoring. No account is needed.
 
-Upgrading from settings version 1 or 2 skips this first-launch form and defaults
-the need to **Monitoring posture**. Existing camera, sound, and calibration
-preferences are retained. You can change the need from Settings at any time.
+Existing users also see the welcome window once after upgrading, with saved
+answers prefilled and **Monitoring posture** as the default for older installs.
+Camera, sound, and calibration preferences are retained. After saving, reopen
+the window by clicking the menu bar icon and choosing
+**Settings → Welcome to SpineSpy…**. No app deletion or reset is needed.
 
 After setup, the app appears as a ferret icon in your menubar and shows a small floating posture pet with a state message above your windows.
 
@@ -132,7 +134,7 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 
 ## Requirements
 
-The official v1.3.0 DMG requires:
+The official v1.3.1 DMG requires:
 
 - An Apple Silicon Mac
 - macOS 15 or newer
