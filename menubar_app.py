@@ -26,7 +26,15 @@ from spinespy.camera import (
     request_camera_access,
     select_camera,
 )
-from spinespy.settings import AppSettings, CalibrationSettings, SettingsStore
+from spinespy.onboarding import WelcomeWindow
+from spinespy.settings import (
+    AppSettings,
+    CalibrationSettings,
+    INTERVAL_LABELS,
+    PRIMARY_NEEDS,
+    SettingsStore,
+    is_valid_interval,
+)
 
 try:
     from AppKit import (
@@ -712,6 +720,10 @@ class PostureGuardApp(rumps.App):
         self.bad_streak = 0
         self.bad_reasons = []
         self.interval = settings.interval
+        self.primary_need = settings.primary_need
+        self.onboarding_completed = settings.onboarding_completed
+        self.welcome_window = None
+        self.timer = None
         self.paused = False
         self.has_saved_calibration = settings.calibration is not None
         self.sound_clips_enabled = settings.sound_clips_enabled
@@ -731,9 +743,7 @@ class PostureGuardApp(rumps.App):
 
         self.pet_panel = FloatingPetPanel()
         self.set_posture_state("good")
-        rumps.events.before_start.register(self.pet_panel.show)
-        if not self.has_saved_calibration:
-            rumps.events.before_start.register(self._request_startup_calibration)
+        rumps.events.before_start.register(self._startup)
 
         self.monitoring_item = rumps.MenuItem("Pause Monitoring", callback=self.toggle_monitoring)
         self.next_capture_at = None
@@ -744,10 +754,10 @@ class PostureGuardApp(rumps.App):
 
         self.interval_menu = rumps.MenuItem("Interval")
         self.interval_items = {
-            30: rumps.MenuItem("30 seconds", callback=lambda _: self.set_interval(30)),
-            60: rumps.MenuItem("1 minute", callback=lambda _: self.set_interval(60)),
-            120: rumps.MenuItem("2 minutes", callback=lambda _: self.set_interval(120)),
-            300: rumps.MenuItem("5 minutes", callback=lambda _: self.set_interval(300)),
+            seconds: rumps.MenuItem(
+                label, callback=lambda _, seconds=seconds: self.set_interval(seconds)
+            )
+            for seconds, label in INTERVAL_LABELS.items()
         }
         for item in self.interval_items.values():
             self.interval_menu.add(item)
@@ -758,6 +768,7 @@ class PostureGuardApp(rumps.App):
         self._refresh_camera_menu()
         self.settings_menu.add(self.camera_menu)
         self.settings_menu.add(self.sound_clips_item)
+        self.settings_menu.add(rumps.MenuItem("Welcome to SpineSpy…", callback=self.show_welcome))
 
         self.menu = [
             self.monitoring_item,
@@ -772,7 +783,62 @@ class PostureGuardApp(rumps.App):
             rumps.MenuItem("Quit", callback=self.quit_app),
         ]
 
+        if not self.onboarding_completed:
+            self.monitoring_item.title = "Finish Setup…"
+            self.next_capture_item.title = "Next capture: Finish setup first"
+
+    def _startup(self):
+        if self.onboarding_completed:
+            self._start_session()
+        else:
+            self.show_welcome()
+
+    def _start_session(self):
+        self.pet_panel.show()
         self._start_monitoring_timer()
+        if not self.has_saved_calibration:
+            self._request_startup_calibration()
+
+    def show_welcome(self, _=None):
+        if self.welcome_window is None:
+            self.welcome_window = WelcomeWindow(
+                resource_path(PET_IMAGE_FILES["good"]),
+                on_complete=self._complete_onboarding,
+                on_close=self._welcome_closed,
+            )
+        self.welcome_window.show(
+            primary_need=self.primary_need,
+            interval=self.interval if self.onboarding_completed else None,
+            completed=self.onboarding_completed,
+        )
+
+    def _welcome_closed(self):
+        if not self.onboarding_completed:
+            self.quit_app(None)
+
+    def _complete_onboarding(self, primary_need, interval):
+        if primary_need not in PRIMARY_NEEDS or not is_valid_interval(interval):
+            return False
+        was_completed = self.onboarding_completed
+        previous_need, previous_interval = self.primary_need, self.interval
+        self.primary_need = primary_need
+        self.interval = interval
+        self.onboarding_completed = True
+        if not self._save_settings():
+            self.primary_need, self.interval = previous_need, previous_interval
+            self.onboarding_completed = was_completed
+            return False
+        if self.welcome_window is not None:
+            self.welcome_window.hide()
+        self._update_interval_menu()
+        if not was_completed:
+            self.monitoring_item.title = "Pause Monitoring"
+            self._start_session()
+        elif interval != previous_interval:
+            if self.timer is not None:
+                self.timer.stop()
+            self._start_monitoring_timer()
+        return True
 
     @property
     def calibrating(self):
@@ -921,6 +987,9 @@ class PostureGuardApp(rumps.App):
         rumps.notification("SpineSpy", "Camera selected", message)
 
     def _with_camera_access(self, action, notify_on_denial):
+        if not self.onboarding_completed:
+            self.show_welcome()
+            return False
         if self._is_quitting or self._camera_permission_request_pending:
             return False
 
@@ -1038,16 +1107,23 @@ class PostureGuardApp(rumps.App):
                     sound_clips_enabled=self.sound_clips_enabled,
                     camera_unique_id=self.camera_unique_id,
                     calibration=calibration,
+                    primary_need=self.primary_need,
+                    onboarding_completed=self.onboarding_completed,
                 )
             )
         except OSError as error:
             print(f"Could not save settings: {error}")
+            return False
+        return True
 
     def _update_interval_menu(self):
-        labels = {30: "30 seconds", 60: "1 minute", 120: "2 minutes", 300: "5 minutes"}
         for seconds, item in self.interval_items.items():
             prefix = "✓ " if seconds == self.interval else ""
-            item.title = f"{prefix}{labels[seconds]}"
+            item.title = f"{prefix}{INTERVAL_LABELS[seconds]}"
+        self.interval_menu.title = (
+            "Interval" if self.interval in INTERVAL_LABELS
+            else f"Interval ({self.interval // 60} minutes)"
+        )
 
     def _request_startup_calibration(self):
         self._request_calibration(startup=True)
@@ -1105,7 +1181,7 @@ class PostureGuardApp(rumps.App):
         self._render_current_state()
 
     def check_posture(self, _):
-        if self.paused:
+        if self.paused or not self.onboarding_completed:
             return
 
         self._schedule_next_capture()
@@ -1177,6 +1253,9 @@ class PostureGuardApp(rumps.App):
         return path
 
     def save_snapshot(self, _):
+        if not self.onboarding_completed:
+            self.show_welcome()
+            return
         path = self._choose_snapshot_path()
         if path is None:
             return
@@ -1213,10 +1292,14 @@ class PostureGuardApp(rumps.App):
         self._render_current_state()
 
     def toggle_monitoring(self, sender):
+        if not self.onboarding_completed:
+            self.show_welcome()
+            return
         self.paused = not self.paused
         if self.paused:
             sender.title = "Resume Monitoring"
-            self.timer.stop()
+            if self.timer is not None:
+                self.timer.stop()
             self.next_capture_at = None
             self.next_capture_item.title = "Next capture: Paused"
             self._operations.invalidate_result()
@@ -1232,8 +1315,14 @@ class PostureGuardApp(rumps.App):
         self._save_settings()
 
     def set_interval(self, seconds):
+        if not is_valid_interval(seconds):
+            return
+        if not self.onboarding_completed:
+            self.show_welcome()
+            return
         self.interval = seconds
-        self.timer.stop()
+        if self.timer is not None:
+            self.timer.stop()
         if self.paused:
             self.next_capture_at = None
             self.next_capture_item.title = "Next capture: Paused"
@@ -1244,9 +1333,21 @@ class PostureGuardApp(rumps.App):
         print(f"Interval set to {seconds}s")
 
     def _start_monitoring_timer(self):
-        self.timer = rumps.Timer(self.check_posture, self.interval)
-        self.timer.start()
+        if not self.onboarding_completed or self.paused or self._is_quitting:
+            return
+        self._waiting_for_first_capture = True
+        self.timer = rumps.Timer(self._scheduled_posture_check, self.interval)
         self._schedule_next_capture()
+        self.timer.start()
+
+    def _scheduled_posture_check(self, sender):
+        # rumps fires once immediately on start; honor the displayed deadline.
+        if self.next_capture_at is None:
+            return
+        if self._waiting_for_first_capture and time.time() < self.next_capture_at:
+            return
+        self._waiting_for_first_capture = False
+        self.check_posture(sender)
 
     def _schedule_next_capture(self):
         self.next_capture_at = time.time() + self.interval
@@ -1260,7 +1361,8 @@ class PostureGuardApp(rumps.App):
         self._is_quitting = True
         self._operations.begin_shutdown()
         self._active_cancel_event.set()
-        self.timer.stop()
+        if self.timer is not None:
+            self.timer.stop()
         self._executor.shutdown(wait=True, cancel_futures=True)
         close_detectors()
         rumps.quit_application()
