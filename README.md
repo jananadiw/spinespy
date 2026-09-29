@@ -75,11 +75,20 @@ releases are signed, notarized, and staged by GitHub Actions after a version
 bump reaches `main`, then published after clean-Mac validation; see
 [docs/releasing.md](docs/releasing.md).
 
-The app appears as a ferret icon in your menubar and shows a small floating posture pet with a state message above your windows. Right-click the menubar icon to:
+On first launch, a centered welcome window asks what you need help with and how
+often to check your posture: every **10 minutes, 20 minutes, 30 minutes, or 1 hour**.
+Choose both answers and click **Get started** to save them locally,
+then begin camera permission and calibration. Closing the window before finishing
+quits the app without starting monitoring. No account is needed.
+
+After setup, the app appears as a ferret icon in your menubar and shows a small floating posture pet with a state message above your windows.
+
+Right-click the menubar icon to:
 - **Pause Monitoring / Resume Monitoring** - Stop or restart scheduled captures in one click
 - **Next capture: ...** - See the exact local time of the next scheduled capture, or confirm that monitoring is paused
 - **Camera: ...** - See exactly when the camera is opening, capturing, off, or processing locally
-- **Interval** - Change snapshot frequency
+- **Interval** - Choose a snapshot frequency (10, 20, 30, or 60 minutes)
+- **Settings → Welcome to SpineSpy…** - Review or change your answers
 - **Settings → Camera** - Choose a connected camera; changing cameras requires recalibration
 - **Settings → Sound Clips** - Turn posture reminder clips on/off
 - **Calibrate** - Capture your current good-posture baseline
@@ -96,9 +105,11 @@ The app appears as a ferret icon in your menubar and shows a small floating post
 
 ## Configuration
 
-Camera choice, interval, sound, and calibration are saved locally in
+Your selected need, interval, setup completion, camera choice, sound, and calibration are saved locally in
 `~/Library/Application Support/SpineSpy/settings.json`. No settings are synced or
-uploaded.
+uploaded. The selected need records your preference; it does not enable a separate
+movement or pain-treatment mode. Existing intervals shorter than 10 minutes move
+to 10 minutes on upgrade; other preferences and calibration are retained.
 
 Detection defaults remain in `menubar_app.py`:
 

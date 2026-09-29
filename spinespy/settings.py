@@ -9,7 +9,25 @@ from pathlib import Path
 from typing import Any
 
 
-VALID_INTERVALS = (30, 60, 120, 300)
+INTERVAL_LABELS = {
+    600: "10 minutes",
+    1200: "20 minutes",
+    1800: "30 minutes",
+    3600: "1 hour",
+}
+DEFAULT_INTERVAL = 600
+# Retain earlier saved timings without offering them in the new form.
+VALID_INTERVALS = (*INTERVAL_LABELS, 900, 7200)
+PRIMARY_NEEDS = {
+    "posture": "Monitoring posture",
+    "movement": "Moving more",
+    "pain": "Reducing pain",
+}
+
+
+def is_valid_interval(value: Any) -> bool:
+    """Accept current presets and previously offered camera intervals."""
+    return type(value) is int and value in VALID_INTERVALS
 
 
 @dataclass(frozen=True)
@@ -22,10 +40,12 @@ class CalibrationSettings:
 
 @dataclass(frozen=True)
 class AppSettings:
-    interval: int = 60
+    interval: int = DEFAULT_INTERVAL
     sound_clips_enabled: bool = True
     camera_unique_id: str | None = None
     calibration: CalibrationSettings | None = None
+    primary_need: str | None = None
+    onboarding_completed: bool = False
 
 
 def default_settings_path() -> Path:
@@ -47,9 +67,16 @@ class SettingsStore:
         if not isinstance(payload, dict):
             return AppSettings()
 
-        interval = payload.get("interval", 60)
-        if interval not in VALID_INTERVALS:
-            interval = 60
+        interval = payload.get("interval", DEFAULT_INTERVAL)
+        if not is_valid_interval(interval):
+            interval = DEFAULT_INTERVAL
+
+        primary_need = payload.get("primary_need")
+        if not isinstance(primary_need, str) or primary_need not in PRIMARY_NEEDS:
+            primary_need = None
+        onboarding_completed = (
+            payload.get("onboarding_completed") is True and primary_need is not None
+        )
 
         sound_enabled = payload.get("sound_clips_enabled", True)
         if not isinstance(sound_enabled, bool):
@@ -69,17 +96,21 @@ class SettingsStore:
             sound_clips_enabled=sound_enabled,
             camera_unique_id=camera_unique_id,
             calibration=calibration,
+            primary_need=primary_need,
+            onboarding_completed=onboarding_completed,
         )
 
     def save(self, settings: AppSettings) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = self.path.with_suffix(".tmp")
         payload = {
-            "version": 2,
+            "version": 3,
             "interval": settings.interval,
             "sound_clips_enabled": settings.sound_clips_enabled,
             "camera_unique_id": settings.camera_unique_id,
             "calibration": asdict(settings.calibration) if settings.calibration else None,
+            "primary_need": settings.primary_need,
+            "onboarding_completed": settings.onboarding_completed,
         }
         temporary_path.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",

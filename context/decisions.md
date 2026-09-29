@@ -6,24 +6,23 @@
 - Revisit: When a supported MediaPipe release offers a documented telemetry opt-out, or Core ML replaces it.
 
 ## 2026-08-06: Automate staged macOS releases
-
 - Decision: A version bump merged to `main` tags, signs, notarizes, and stages a draft on an ephemeral GitHub macOS runner; publication remains gated by clean-Mac validation.
 - Reason: Remove local release toil without weakening the physical camera, Gatekeeper, and exact-artifact checks.
 - Impact: Signing secrets live in the protected `release-signing` environment; `release-publish` gates publication of the unchanged draft.
 - Revisit: If GitHub-hosted signing is no longer trusted or clean-device testing can be automated safely.
 
 ## 2026-07-18: Persist preferences and calibration locally
-
 - Decision: Store interval, sound preference, and calibration in Application Support, but reset paused state on launch.
 - Reason: Preserve useful setup without allowing a silently paused monitor to mislead users.
 - Impact: Returning users keep their configuration and normally avoid recalibration.
 - Revisit: If desk-profile switching requires multiple named calibrations.
 
 ## 2026-08-05: Serialize camera work and make capture timing explicit
-
 - Decision: Serialize camera work, request permission on the main thread, select by AVFoundation ID, show the next capture time, stop scheduling while paused, and show 📷 only during camera access.
 - Reason: Prevent overlap, stale UI, worker-thread permission failures, unintended Continuity Camera capture, and ambiguous periodic access.
 - Impact: Users can predict and pause captures, distinguish camera access from local processing, persist an explicit external camera, and recalibrate after switching.
 - Revisit: If macOS provides a reliable camera-usage observer or scheduler API that should replace callbacks and local deadlines.
 
 - 2026-09-13: Use custom color ferret/shrimp menu bar icons to match posture pets; retain temporary status emoji. Bundle transparent PNGs and clear them for temporary states. Revisit if small-size legibility requires silhouettes.
+
+- 2026-09-28: Gate first use on a native welcome form; save need, camera interval, and completion locally without accounts. Keep onboarding independent of future purchase verification. Offer only 10/20/30/60-minute presets for a short setup; preserve older saved timings until changed. Revisit for custom intervals, purchase licensing, or distinct movement reminders.

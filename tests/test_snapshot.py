@@ -1,6 +1,7 @@
 """Integration tests for snapshot flow."""
 
 from pathlib import Path
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -391,16 +392,21 @@ class TestOperationCoordinator:
 
 
 class TestPostureGuardApp:
-    def _make_app(self, settings=None, bypass_camera_permission=True):
+    def _make_app(self, settings=None, bypass_camera_permission=True, setup_complete=True):
         from menubar_app import PostureGuardApp
 
         settings_store = MagicMock()
-        settings_store.load.return_value = settings or AppSettings()
+        settings = settings or AppSettings()
+        if setup_complete:
+            settings = replace(settings, primary_need="posture", onboarding_completed=True)
+        settings_store.load.return_value = settings
         with patch("menubar_app.FloatingPetPanel", _PetPanelStub):
             app = PostureGuardApp(
                 settings_store=settings_store,
                 executor=_ImmediateExecutor(),
             )
+            if setup_complete:
+                app._start_monitoring_timer()
             app.timer = MagicMock()
             app._dispatch_main = lambda callback, *args: callback(*args)
             if bypass_camera_permission:
@@ -565,12 +571,12 @@ class TestPostureGuardApp:
         ):
             app = self._make_app()
 
-            app.set_interval(120)
-            assert app.next_capture_at == 320.0
+            app.set_interval(600)
+            assert app.next_capture_at == 800.0
             assert app.next_capture_item.title == "Next capture: 3:00:00 PM"
 
             app.toggle_monitoring(app.monitoring_item)
-            app.set_interval(300)
+            app.set_interval(900)
             assert app.next_capture_at is None
             assert app.next_capture_item.title == "Next capture: Paused"
 
@@ -579,7 +585,7 @@ class TestPostureGuardApp:
 
         app = self._make_app(
             AppSettings(
-                interval=120,
+                interval=900,
                 sound_clips_enabled=False,
                 camera_unique_id="mac-camera",
                 calibration=CalibrationSettings(
@@ -591,12 +597,12 @@ class TestPostureGuardApp:
             )
         )
 
-        assert app.interval == 120
+        assert app.interval == 900
         assert app.sound_clips_enabled is False
         assert app.camera_unique_id == "mac-camera"
         assert app.has_saved_calibration is True
         assert app.sound_clips_item.title == "Sound Clips (off)"
-        assert app.interval_items[120].title == "✓ 2 minutes"
+        assert app.interval_menu.title == "Interval (15 minutes)"
         assert menubar_app.baseline_lean == 0.11
         assert menubar_app.effective_tilt_threshold == 0.07
 
