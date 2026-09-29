@@ -1,8 +1,11 @@
-# SpineSpy 1.2.7
+# SpineSpy 1.3.0
 
-SpineSpy now uses the good-posture ferret as its macOS app icon.
+SpineSpy now welcomes new users with a short, native setup window.
 
-- Replaces the previous app icon with the transparent ferret artwork, fitted to a square canvas without stretching.
-- Uses the same ferret icon for the installer disk image.
+- Choose your main goal: monitoring posture, moving more, or reducing pain.
+- Set camera check-ins to every 10, 20, 30, or 60 minutes.
+- Save your answers locally without an account, and revisit them from Settings.
+- Existing users continue without repeating setup, with camera and calibration preferences preserved. Intervals below 10 minutes move to 10 minutes.
+- Scheduled checks wait for the selected interval, and pausing safely handles a timer that has not started.
 
-The ferret and shrimp menu bar icons and floating pets introduced in 1.2.6 remain unchanged, along with posture detection, capture scheduling, and local-only processing.
+Camera images are processed locally and are saved only when you choose Save Snapshot. Your selected goal records a preference; it does not change posture detection or provide pain treatment.
