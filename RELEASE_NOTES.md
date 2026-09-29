@@ -1,9 +1,10 @@
-# SpineSpy 1.2.6
+# SpineSpy 1.3.1
 
-SpineSpy now uses matching ferret and shrimp artwork in the menu bar and floating pet.
+SpineSpy now shows the welcome window once after upgrading, so existing users can choose their preferences without resetting the app.
 
-- Replaces the superhero and zombie menu bar emoji with custom color icons: an upright ferret for good posture and a curled shrimp for bad posture.
-- Refreshes the floating pets with transparent ferret and shrimp illustrations.
-- Keeps the camera, calibration, and pause indicators visible during their respective states, then restores the posture icon.
+- Prefills saved answers and keeps camera, sound, and calibration preferences.
+- Shows setup once for settings from v1.3.0 and earlier; later launches skip it after answers are saved.
+- Explains how to change answers again: click the menu bar icon, then choose **Settings → Welcome to SpineSpy…**.
+- Keeps previously saved 15-minute and 2-hour intervals available when reviewing preferences.
 
-Posture detection, capture scheduling, and local-only processing are unchanged.
+All processing and preferences remain local to your Mac.
