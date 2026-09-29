@@ -38,7 +38,7 @@ def test_first_launch_waits_for_answers_before_camera_or_pet(launch):
     app._startup()
 
     app.welcome_window.show.assert_called_once_with(
-        primary_need=None, interval=600, completed=False,
+        primary_need=None, interval=None, completed=False,
     )
     app.pet_panel.show.assert_not_called()
     app._request_startup_calibration.assert_not_called()

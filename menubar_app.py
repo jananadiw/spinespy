@@ -808,7 +808,7 @@ class PostureGuardApp(rumps.App):
             )
         self.welcome_window.show(
             primary_need=self.primary_need,
-            interval=self.interval,
+            interval=self.interval if self.onboarding_completed else None,
             completed=self.onboarding_completed,
         )
 

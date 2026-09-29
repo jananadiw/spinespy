@@ -114,9 +114,6 @@ Your selected need, interval, setup completion, camera choice, sound, and calibr
 uploaded. The selected need records your preference; it does not enable a separate
 movement or pain-treatment mode. Existing intervals shorter than 10 minutes move
 to 10 minutes on upgrade; other preferences and calibration are retained.
-Saved 15-minute or 2-hour intervals from unreleased onboarding previews stay in
-effect when you edit only your need. The form shows the retained interval until
-you choose a new preset.
 
 Detection defaults remain in `menubar_app.py`:
 
