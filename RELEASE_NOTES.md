@@ -1,10 +1,5 @@
-# SpineSpy 1.3.1
+# SpineSpy 1.3.2
 
-SpineSpy now shows the welcome window once after upgrading, so existing users can choose their preferences without resetting the app.
+Right-click or Control-click the floating posture pet and choose **Quit SpineSpy** to close the app. The menu works for both the standing ferret and curled shrimp; normal dragging still moves the pet.
 
-- Prefills saved answers and keeps camera, sound, and calibration preferences.
-- Shows setup once for settings from v1.3.0 and earlier; later launches skip it after answers are saved.
-- Explains how to change answers again: click the menu bar icon, then choose **Settings → Welcome to SpineSpy…**.
-- Keeps previously saved 15-minute and 2-hour intervals available when reviewing preferences.
-
-All processing and preferences remain local to your Mac.
+This update also includes the v1.3.1 welcome-on-upgrade changes: saved preferences and calibration are preserved, and answers can be edited again from **Settings → Welcome to SpineSpy…** in the menu bar.

@@ -134,7 +134,7 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 
 ## Requirements
 
-The official v1.3.1 DMG requires:
+The official v1.3.2 DMG requires:
 
 - An Apple Silicon Mac
 - macOS 15 or newer
