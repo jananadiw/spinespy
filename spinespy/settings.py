@@ -16,7 +16,7 @@ INTERVAL_LABELS = {
     3600: "1 hour",
 }
 DEFAULT_INTERVAL = 600
-# Retain earlier saved timings without offering them in the new form.
+# Preserve 15-minute / 2-hour values from unreleased onboarding previews.
 VALID_INTERVALS = (*INTERVAL_LABELS, 900, 7200)
 PRIMARY_NEEDS = {
     "posture": "Monitoring posture",
@@ -77,6 +77,16 @@ class SettingsStore:
         onboarding_completed = (
             payload.get("onboarding_completed") is True and primary_need is not None
         )
+        # Existing installs already ran the app before onboarding existed.
+        # Only migrate known old schemas; never override unfinished modern setup.
+        version = payload.get("version")
+        if (
+            type(version) is int and version in (1, 2)
+            and "primary_need" not in payload
+            and "onboarding_completed" not in payload
+        ):
+            primary_need = "posture"
+            onboarding_completed = True
 
         sound_enabled = payload.get("sound_clips_enabled", True)
         if not isinstance(sound_enabled, bool):

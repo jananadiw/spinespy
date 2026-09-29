@@ -808,7 +808,7 @@ class PostureGuardApp(rumps.App):
             )
         self.welcome_window.show(
             primary_need=self.primary_need,
-            interval=self.interval if self.onboarding_completed else None,
+            interval=self.interval,
             completed=self.onboarding_completed,
         )
 
@@ -1298,7 +1298,8 @@ class PostureGuardApp(rumps.App):
         self.paused = not self.paused
         if self.paused:
             sender.title = "Resume Monitoring"
-            self.timer.stop()
+            if self.timer is not None:
+                self.timer.stop()
             self.next_capture_at = None
             self.next_capture_item.title = "Next capture: Paused"
             self._operations.invalidate_result()

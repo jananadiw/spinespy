@@ -25,4 +25,4 @@
 
 - 2026-09-13: Use custom color ferret/shrimp menu bar icons to match posture pets; retain temporary status emoji. Bundle transparent PNGs and clear them for temporary states. Revisit if small-size legibility requires silhouettes.
 
-- 2026-09-28: Gate first use on a native welcome form; save need, camera interval, and completion locally without accounts. Keep onboarding independent of future purchase verification. Offer only 10/20/30/60-minute presets for a short setup; preserve older saved timings until changed. Revisit for custom intervals, purchase licensing, or distinct movement reminders.
+- 2026-09-28: Gate new installs on native, local-only onboarding, independent of purchase verification. V1/v2 installs continue with posture as the default need to avoid blocking upgrades. Offer 10/20/30/60-minute presets; preserve preview-only 15/120-minute timings when editing the need. Revisit for custom intervals, licensing, or movement reminders.

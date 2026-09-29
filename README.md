@@ -81,6 +81,10 @@ Choose both answers and click **Get started** to save them locally,
 then begin camera permission and calibration. Closing the window before finishing
 quits the app without starting monitoring. No account is needed.
 
+Upgrading from settings version 1 or 2 skips this first-launch form and defaults
+the need to **Monitoring posture**. Existing camera, sound, and calibration
+preferences are retained. You can change the need from Settings at any time.
+
 After setup, the app appears as a ferret icon in your menubar and shows a small floating posture pet with a state message above your windows.
 
 Right-click the menubar icon to:
@@ -110,6 +114,9 @@ Your selected need, interval, setup completion, camera choice, sound, and calibr
 uploaded. The selected need records your preference; it does not enable a separate
 movement or pain-treatment mode. Existing intervals shorter than 10 minutes move
 to 10 minutes on upgrade; other preferences and calibration are retained.
+Saved 15-minute or 2-hour intervals from unreleased onboarding previews stay in
+effect when you edit only your need. The form shows the retained interval until
+you choose a new preset.
 
 Detection defaults remain in `menubar_app.py`:
 

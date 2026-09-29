@@ -1,5 +1,6 @@
 """First-launch lifecycle, persistence failures, and camera gating."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -37,7 +38,7 @@ def test_first_launch_waits_for_answers_before_camera_or_pet(launch):
     app._startup()
 
     app.welcome_window.show.assert_called_once_with(
-        primary_need=None, interval=None, completed=False,
+        primary_need=None, interval=600, completed=False,
     )
     app.pet_panel.show.assert_not_called()
     app._request_startup_calibration.assert_not_called()
@@ -206,3 +207,46 @@ def test_immediate_rumps_timer_tick_waits_until_selected_deadline(launch):
         with patch("menubar_app.time.time", return_value=1900):
             app._scheduled_posture_check(None)
         assert capture.call_count == 2
+
+
+def test_pause_before_startup_handles_missing_timer(launch):
+    app = launch(AppSettings(primary_need="posture", onboarding_completed=True))
+    assert app.timer is None
+
+    app.toggle_monitoring(app.monitoring_item)
+
+    assert app.paused is True
+    assert app.next_capture_at is None
+    assert app.monitoring_item.title == "Resume Monitoring"
+    app.toggle_monitoring(app.monitoring_item)
+    app.timer.start.assert_called_once()
+
+
+def test_existing_calibrated_install_starts_without_welcome_and_can_dismiss_settings(launch):
+    initial = launch()
+    initial.settings_store.path.write_text(json.dumps({
+        "version": 2,
+        "interval": 120,
+        "camera_unique_id": "my-camera",
+        "calibration": {
+            "baseline_lean": 0.1, "baseline_tilt": 0.02,
+            "slouch_threshold": 0.15, "tilt_threshold": 0.08,
+        },
+    }))
+    app = launch()
+    app._startup()
+
+    assert app.welcome_window is None
+    assert app.primary_need == "posture"
+    assert app.interval == 600
+    assert app.camera_unique_id == "my-camera"
+    app.pet_panel.show.assert_called_once()
+    app.timer.start.assert_called_once()
+    app._request_startup_calibration.assert_not_called()
+    app.show_welcome()
+    app.welcome_window.show.assert_called_once_with(
+        primary_need="posture", interval=600, completed=True,
+    )
+    with patch.object(app, "quit_app") as quit_app:
+        app._welcome_closed()
+    quit_app.assert_not_called()

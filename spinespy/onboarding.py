@@ -26,7 +26,7 @@ from AppKit import (
 )
 from Foundation import NSObject
 
-from spinespy.settings import INTERVAL_LABELS, PRIMARY_NEEDS
+from spinespy.settings import INTERVAL_LABELS, PRIMARY_NEEDS, is_valid_interval
 
 
 class _WelcomeActions(NSObject):
@@ -50,6 +50,7 @@ class WelcomeWindow:
         self.on_complete = on_complete
         self.on_close = on_close
         self.primary_need = None
+        self.retained_interval = None
         self.window = None
         self.image_path = image_path
         self.need_buttons = []
@@ -157,11 +158,11 @@ class WelcomeWindow:
         for key, button in zip(PRIMARY_NEEDS, self.need_buttons):
             button.setState_(int(key == primary_need))
         intervals = tuple(INTERVAL_LABELS)
+        self.retained_interval = interval if is_valid_interval(interval) else None
         self.interval_control.setSelectedSegment_(
             intervals.index(interval) if interval in intervals else -1
         )
         self.continue_button.setTitle_("Save changes" if completed else "Get started")
-        self.status_label.setStringValue_("")
         self.update_continue()
 
         # Center in the usable screen area, including on external displays.
@@ -183,15 +184,21 @@ class WelcomeWindow:
         self.update_continue()
 
     def update_continue(self):
+        index = self.interval_control.selectedSegment()
+        retaining = index < 0 and self.retained_interval is not None
+        self.status_label.setStringValue_(
+            f"Keeping your {self.retained_interval // 60}-minute interval." if retaining else ""
+        )
         self.continue_button.setEnabled_(
-            self.primary_need in PRIMARY_NEEDS and self.interval_control.selectedSegment() >= 0
+            self.primary_need in PRIMARY_NEEDS and (index >= 0 or retaining)
         )
 
     def submit(self):
         index = self.interval_control.selectedSegment()
-        if self.primary_need not in PRIMARY_NEEDS or index < 0:
+        interval = tuple(INTERVAL_LABELS)[index] if index >= 0 else self.retained_interval
+        if self.primary_need not in PRIMARY_NEEDS or not is_valid_interval(interval):
             return
-        if not self.on_complete(self.primary_need, tuple(INTERVAL_LABELS)[index]):
+        if not self.on_complete(self.primary_need, interval):
             self.status_label.setStringValue_("Couldn’t save. Please try again.")
 
     def hide(self):

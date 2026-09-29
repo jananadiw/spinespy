@@ -83,7 +83,8 @@ def test_legacy_intervals_migrate_to_ten_minutes_without_losing_preferences(tmp_
     assert settings.sound_clips_enabled is False
     assert settings.camera_unique_id == "saved-camera"
     assert settings.calibration == CalibrationSettings(0.12, 0.03, 0.15, 0.08)
-    assert settings.onboarding_completed is False
+    assert settings.onboarding_completed is True
+    assert settings.primary_need == "posture"
 
 
 @pytest.mark.parametrize("interval", [600, 900, 1200, 1800, 3600, 7200])
@@ -119,3 +120,40 @@ def test_unsupported_interval_falls_back_to_ten_minutes(tmp_path, interval):
     path.write_text(json.dumps({"interval": interval}))
 
     assert SettingsStore(path).load().interval == 600
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_pre_onboarding_settings_migrate_and_survive_a_save(tmp_path, version):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"version": version, "interval": 60, "sound_clips_enabled": False}))
+    store = SettingsStore(path)
+
+    migrated = store.load()
+    store.save(migrated)
+
+    assert migrated == AppSettings(
+        interval=600, sound_clips_enabled=False,
+        primary_need="posture", onboarding_completed=True,
+    )
+    assert json.loads(path.read_text())["version"] == 3
+    assert store.load() == migrated
+
+
+@pytest.mark.parametrize("version", [None, True, "2", 0, 3, 4])
+def test_unknown_or_current_schema_does_not_skip_setup(tmp_path, version):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"version": version, "interval": 600}))
+
+    assert SettingsStore(path).load().onboarding_completed is False
+
+
+@pytest.mark.parametrize("fields", [
+    {"onboarding_completed": False},
+    {"primary_need": "movement"},
+    {"primary_need": None, "onboarding_completed": True},
+])
+def test_old_version_with_onboarding_fields_is_not_grandfathered(tmp_path, fields):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"version": 2, "interval": 600, **fields}))
+
+    assert SettingsStore(path).load().onboarding_completed is False
