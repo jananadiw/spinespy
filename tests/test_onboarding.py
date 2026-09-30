@@ -14,8 +14,8 @@ def launch(tmp_path):
 
     store = SettingsStore(tmp_path / "settings.json")
     with (
-        patch("menubar_app.FloatingPetPanel"),
-        patch("menubar_app.WelcomeWindow"),
+        patch("menubar_app.FloatingPetPanel", side_effect=lambda **_: MagicMock()),
+        patch("menubar_app.WelcomeWindow", side_effect=lambda *_, **__: MagicMock()),
         patch("menubar_app.discover_cameras", return_value=()),
         patch("menubar_app.rumps.Timer"),
         patch("menubar_app.PostureGuardApp._request_startup_calibration"),
@@ -49,7 +49,7 @@ def test_first_launch_waits_for_answers_before_camera_or_pet(launch):
 
 
 @pytest.mark.parametrize("interval", [600, 1200, 1800, 3600])
-def test_completion_saves_before_starting_and_skips_welcome_after_restart(launch, interval):
+def test_completion_saves_before_starting_and_shows_welcome_after_restart(launch, interval):
     app = launch()
     app._startup()
 
@@ -69,7 +69,9 @@ def test_completion_saves_before_starting_and_skips_welcome_after_restart(launch
     returning = launch()
     with patch.object(returning, "show_welcome") as show:
         returning._startup()
-    show.assert_not_called()
+    show.assert_called_once()
+    assert returning.timer is None
+    returning.pet_panel.show.assert_not_called()
     assert returning.interval == interval
     assert returning.primary_need == "movement"
 
@@ -139,6 +141,7 @@ def test_closing_unfinished_welcome_quits_without_marking_complete(launch):
 def test_editing_answers_while_paused_does_not_restart_camera(launch):
     app = launch(AppSettings(primary_need="posture", onboarding_completed=True))
     app._startup()
+    app._complete_onboarding("posture", 600)
     app.toggle_monitoring(app.monitoring_item)
     app.timer.reset_mock()
 
@@ -158,6 +161,7 @@ def test_editing_answers_while_paused_does_not_restart_camera(launch):
 def test_other_settings_changes_preserve_answers(launch):
     app = launch(AppSettings(primary_need="movement", onboarding_completed=True))
 
+    app._complete_onboarding("movement", 600)
     app.toggle_sound_clips(app.sound_clips_item)
     app.set_interval(900)
 
@@ -181,6 +185,7 @@ def test_sub_ten_minute_intervals_cannot_be_selected(launch):
 def test_legacy_interval_is_preserved_until_a_new_preset_is_chosen(launch):
     app = launch(AppSettings(interval=900, primary_need="posture", onboarding_completed=True))
 
+    app._complete_onboarding("posture", 900)
     assert app.interval_menu.title == "Interval (15 minutes)"
     assert app.interval == 900
     app.set_interval(1200)
@@ -192,6 +197,7 @@ def test_immediate_rumps_timer_tick_waits_until_selected_deadline(launch):
     app = launch(AppSettings(interval=900, primary_need="posture", onboarding_completed=True))
     with patch("menubar_app.time.time", return_value=100):
         app._startup()
+        app._complete_onboarding("posture", 900)
 
     with patch.object(app, "check_posture") as capture:
         for now in (100, 101, 999):
@@ -209,21 +215,19 @@ def test_immediate_rumps_timer_tick_waits_until_selected_deadline(launch):
         assert capture.call_count == 2
 
 
-def test_pause_before_startup_handles_missing_timer(launch):
+def test_returning_user_cannot_pause_past_startup_welcome(launch):
     app = launch(AppSettings(primary_need="posture", onboarding_completed=True))
+    app.toggle_monitoring(app.monitoring_item)
+    assert app.paused is False
     assert app.timer is None
-
-    app.toggle_monitoring(app.monitoring_item)
-
-    assert app.paused is True
-    assert app.next_capture_at is None
-    assert app.monitoring_item.title == "Resume Monitoring"
-    app.toggle_monitoring(app.monitoring_item)
-    app.timer.start.assert_called_once()
+    assert app.monitoring_item.title == "Finish Setup…"
+    app.welcome_window.show.assert_called_once_with(
+        primary_need="posture", interval=600, completed=False,
+    )
 
 
 @pytest.mark.parametrize("version", [1, 2, 3])
-def test_upgrade_shows_welcome_once_and_preserves_preferences(launch, version):
+def test_upgrade_and_restart_show_welcome_and_preserve_preferences(launch, version):
     initial = launch()
     initial.settings_store.path.write_text(json.dumps({
         "version": version,
@@ -253,9 +257,53 @@ def test_upgrade_shows_welcome_once_and_preserves_preferences(launch, version):
     app._request_startup_calibration.assert_not_called()
     returning = launch()
     returning._startup()
-    assert returning.welcome_window is None
-    app.welcome_window.show.reset_mock()
-    returning.show_welcome()
+    assert returning.timer is None
     returning.welcome_window.show.assert_called_once_with(
-        primary_need="movement", interval=1200, completed=True,
+        primary_need="movement", interval=1200, completed=False,
     )
+
+
+@pytest.mark.parametrize("completed", [False, True])
+def test_startup_close_and_camera_gating_apply_to_all_users(launch, completed):
+    app = launch(AppSettings(primary_need="movement", onboarding_completed=completed))
+    app._startup()
+    with (
+        patch("menubar_app.camera_authorization_status") as status,
+        patch.object(app, "_choose_snapshot_path") as save_dialog,
+        patch.object(app, "_start_posture_check") as capture,
+    ):
+        app.run_calibration(None)
+        app.save_snapshot(None)
+        app.check_posture(None)
+        app.set_interval(1200)
+        app._start_monitoring_timer()
+    status.assert_not_called()
+    save_dialog.assert_not_called()
+    capture.assert_not_called()
+    assert app.timer is None
+    with patch.object(app, "quit_app") as quit_app:
+        app._welcome_closed()
+    quit_app.assert_called_once_with(None)
+
+
+def test_returning_user_continue_starts_once_with_saved_calibration(launch):
+    calibration = CalibrationSettings(0.1, 0.02, 0.15, 0.08)
+    app = launch(AppSettings(primary_need="movement", onboarding_completed=True,
+                             calibration=calibration, sound_clips_enabled=False,
+                             camera_unique_id="my-camera"))
+    app._startup()
+    with patch.object(app.settings_store, "save", side_effect=OSError("Disk full")):
+        assert app._complete_onboarding("movement", 600) is False
+    assert app.timer is None
+    assert app.onboarding_completed is True
+    assert app._complete_onboarding("movement", 600) is True
+    app.pet_panel.show.assert_called_once()
+    app.timer.start.assert_called_once()
+    app._request_startup_calibration.assert_not_called()
+    saved = app.settings_store.load()
+    assert saved.calibration == calibration
+    assert saved.camera_unique_id == "my-camera"
+    assert saved.sound_clips_enabled is False
+    app.show_welcome()
+    assert app._complete_onboarding("movement", 600) is True
+    app.timer.start.assert_called_once()

@@ -25,4 +25,4 @@
 
 - 2026-09-13: Use custom color ferret/shrimp menu bar icons to match posture pets; retain temporary status emoji. Bundle transparent PNGs and clear them for temporary states. Revisit if small-size legibility requires silhouettes.
 
-- 2026-09-28: Gate new installs on native, local-only onboarding, independent of purchase verification. Settings v1–v3 show welcome once on upgrade with saved answers prefilled; v4 records completion. Preserve camera, sound, and calibration. Offer only 10/20/30/60-minute presets for a short setup. Revisit for custom intervals, licensing, or movement reminders.
+- 2026-09-28: Gate new installs on native, local-only onboarding, independent of purchase verification. Every launch shows welcome with saved answers prefilled; monitoring waits for Get started. v4 records saved completion, separate from session readiness. Preserve camera, sound, and calibration. Offer only 10/20/30/60-minute presets for a short setup. Revisit for custom intervals, licensing, or movement reminders.

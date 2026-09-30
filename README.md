@@ -75,13 +75,13 @@ releases are signed, notarized, and staged by GitHub Actions after a version
 bump reaches `main`, then published after clean-Mac validation; see
 [docs/releasing.md](docs/releasing.md).
 
-On first launch, a centered welcome window asks what you need help with and how
+On every launch, a centered welcome window asks what you need help with and how
 often to check your posture: every **10 minutes, 20 minutes, 30 minutes, or 1 hour**.
 Choose both answers and click **Get started** to save them locally,
-then begin camera permission and calibration. Closing the window before finishing
+then begin monitoring and request camera permission or calibration if needed. Closing the window before finishing
 quits the app without starting monitoring. No account is needed.
 
-Existing users also see the welcome window once after upgrading, with saved
+Returning users see the welcome window on every launch, with saved
 answers prefilled and **Monitoring posture** as the default for older installs.
 Camera, sound, and calibration preferences are retained. After saving, reopen
 the window by clicking the menu bar icon and choosing
@@ -134,7 +134,7 @@ BAD_STREAK_LIMIT = 5     # bad snapshots before alert
 
 ## Requirements
 
-The official v1.3.2 DMG requires:
+The official v1.3.3 DMG requires:
 
 - An Apple Silicon Mac
 - macOS 15 or newer
