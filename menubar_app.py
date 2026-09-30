@@ -743,6 +743,7 @@ class PostureGuardApp(rumps.App):
         self.interval = settings.interval
         self.primary_need = settings.primary_need
         self.onboarding_completed = settings.onboarding_completed
+        self._session_started = False
         self.welcome_window = None
         self.timer = None
         self.paused = False
@@ -804,17 +805,14 @@ class PostureGuardApp(rumps.App):
             rumps.MenuItem("Quit", callback=self.quit_app),
         ]
 
-        if not self.onboarding_completed:
-            self.monitoring_item.title = "Finish Setup…"
-            self.next_capture_item.title = "Next capture: Finish setup first"
+        self.monitoring_item.title = "Finish Setup…"
+        self.next_capture_item.title = "Next capture: Finish setup first"
 
     def _startup(self):
-        if self.onboarding_completed:
-            self._start_session()
-        else:
-            self.show_welcome()
+        self.show_welcome()
 
     def _start_session(self):
+        self._session_started = True
         self.pet_panel.show()
         self._start_monitoring_timer()
         if not self.has_saved_calibration:
@@ -830,11 +828,11 @@ class PostureGuardApp(rumps.App):
         self.welcome_window.show(
             primary_need=self.primary_need,
             interval=self.interval if self.primary_need is not None else None,
-            completed=self.onboarding_completed,
+            completed=self._session_started,
         )
 
     def _welcome_closed(self):
-        if not self.onboarding_completed:
+        if not self._session_started:
             self.quit_app(None)
 
     def _complete_onboarding(self, primary_need, interval):
@@ -852,7 +850,7 @@ class PostureGuardApp(rumps.App):
         if self.welcome_window is not None:
             self.welcome_window.hide()
         self._update_interval_menu()
-        if not was_completed:
+        if not self._session_started:
             self.monitoring_item.title = "Pause Monitoring"
             self._start_session()
         elif interval != previous_interval:
@@ -1008,7 +1006,7 @@ class PostureGuardApp(rumps.App):
         rumps.notification("SpineSpy", "Camera selected", message)
 
     def _with_camera_access(self, action, notify_on_denial):
-        if not self.onboarding_completed:
+        if not self._session_started:
             self.show_welcome()
             return False
         if self._is_quitting or self._camera_permission_request_pending:
@@ -1202,7 +1200,7 @@ class PostureGuardApp(rumps.App):
         self._render_current_state()
 
     def check_posture(self, _):
-        if self.paused or not self.onboarding_completed:
+        if self.paused or not self._session_started:
             return
 
         self._schedule_next_capture()
@@ -1274,7 +1272,7 @@ class PostureGuardApp(rumps.App):
         return path
 
     def save_snapshot(self, _):
-        if not self.onboarding_completed:
+        if not self._session_started:
             self.show_welcome()
             return
         path = self._choose_snapshot_path()
@@ -1313,7 +1311,7 @@ class PostureGuardApp(rumps.App):
         self._render_current_state()
 
     def toggle_monitoring(self, sender):
-        if not self.onboarding_completed:
+        if not self._session_started:
             self.show_welcome()
             return
         self.paused = not self.paused
@@ -1338,7 +1336,7 @@ class PostureGuardApp(rumps.App):
     def set_interval(self, seconds):
         if not is_valid_interval(seconds):
             return
-        if not self.onboarding_completed:
+        if not self._session_started:
             self.show_welcome()
             return
         self.interval = seconds
@@ -1354,7 +1352,7 @@ class PostureGuardApp(rumps.App):
         print(f"Interval set to {seconds}s")
 
     def _start_monitoring_timer(self):
-        if not self.onboarding_completed or self.paused or self._is_quitting:
+        if not self._session_started or self.paused or self._is_quitting:
             return
         self._waiting_for_first_capture = True
         self.timer = rumps.Timer(self._scheduled_posture_check, self.interval)

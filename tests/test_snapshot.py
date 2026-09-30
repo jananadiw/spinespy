@@ -407,6 +407,8 @@ class TestPostureGuardApp:
                 executor=_ImmediateExecutor(),
             )
             if setup_complete:
+                app._session_started = True
+                app.monitoring_item.title = "Pause Monitoring"
                 app._start_monitoring_timer()
             app.timer = MagicMock()
             app._dispatch_main = lambda callback, *args: callback(*args)
