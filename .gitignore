@@ -27,6 +27,9 @@ pose_landmarker.task
 # Debug files
 debug_snapshot.jpg
 
+# Source pet masters; the app uses assets/pets/posture-*.png
+assets/pets/original/
+
 # Build artifacts
 build/
 dist/
