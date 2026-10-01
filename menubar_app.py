@@ -424,8 +424,6 @@ def check_posture(landmarks):
     lean_delta = forward_lean - baseline_lean
     tilt_delta = tilt - baseline_tilt
 
-    print(f"  [DEBUG] lean_delta={lean_delta:.3f} (threshold={effective_slouch_threshold:.3f}), tilt_delta={tilt_delta:.3f} (threshold={effective_tilt_threshold:.3f})")
-
     if lean_delta >= effective_slouch_threshold:
         severity = _severity_label(lean_delta, effective_slouch_threshold)
         return True, f"Slouching ({severity})"
@@ -448,11 +446,8 @@ def detect_phone(frame):
         if not detection.categories:
             continue
         category = detection.categories[0]
-        print(f"  [DEBUG] Detected {category.category_name}, confidence={category.score:.2f}")
         if category.category_name == "cell phone":
-            print(f"  [DEBUG] ✓ Phone detected! confidence={category.score:.2f}")
             return True
-    print("  [DEBUG] No phone detected")
     return False
 
 
@@ -515,14 +510,12 @@ def take_snapshot(
             bad_votes.append(False)
 
     bad_count = sum(bad_votes)
-    print(f"[DEBUG] Posture votes: {bad_count}/{len(bad_votes)} bad")
 
     if bad_count >= len(bad_votes) / 2 and reasons:
         dominant_reason = Counter(reasons).most_common(1)[0][0]
         return True, dominant_reason
 
     phone_found = detect_phone(frames[-1])
-    print(f"[DEBUG] Phone detected: {phone_found}")
 
     if phone_found:
         return True, "Phone detected"
@@ -761,7 +754,6 @@ class PostureGuardApp(rumps.App):
             max_workers=1,
             thread_name_prefix="SpineSpyWorker",
         )
-        self._owns_executor = executor is None
 
         self.pet_panel = FloatingPetPanel(on_quit=self.quit_app)
         self.set_posture_state("good")
