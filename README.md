@@ -15,7 +15,9 @@ The demo shows the floating pet changing state and playing a reminder after repe
 
 ## Privacy
 
-SpineSpy processes snapshots locally on your device. Camera frames stay in memory and are not uploaded or stored unless you explicitly choose **Save Snapshot**. Monitoring performs no network requests. Source builds download the two checksum-verified model files only when you run `./scripts/download_models.sh`.
+SpineSpy processes snapshots locally on your device. Camera frames stay in memory and are not uploaded or stored unless you explicitly choose **Save Snapshot**. Monitoring performs no network requests.
+
+SpineSpy Pro licensing communicates only with Lemon Squeezy's License API to activate, validate, and deactivate licenses. License validation sends only your license key and a unique device identifier—never camera data or usage information. Source builds download the two checksum-verified model files only when you run `./scripts/download_models.sh`.
 
 ## Features
 
@@ -29,6 +31,8 @@ SpineSpy processes snapshots locally on your device. Camera frames stay in memor
 - **Makes camera use visible** - Shows the selected camera plus opening, capturing, off, and local-processing states in the menubar
 - **Makes every capture predictable** - Shows the exact local time of the next scheduled capture and stops scheduling while paused
 - **Remembers your preferences** - Persists the camera, interval, sound setting, and calibration between launches
+- **7-day free trial** - Try SpineSpy Pro features free for 7 days
+- **Simple licensing** - Activate SpineSpy Pro on up to 3 Macs with one license key
 
 ## Setup
 
@@ -97,6 +101,7 @@ Right-click the menubar icon to:
 - **Settings → Welcome to SpineSpy…** - Review or change your answers
 - **Settings → Camera** - Choose a connected camera; changing cameras requires recalibration
 - **Settings → Sound Clips** - Turn posture reminder clips on/off
+- **SpineSpy Pro** - View trial status, enter license key, purchase SpineSpy Pro, or deactivate this Mac
 - **Calibrate** - Capture your current good-posture baseline
 - **Quit** - Exit the app
 
@@ -109,10 +114,23 @@ Right-click the menubar icon to:
 5. Floating pet artwork, speech bubble, and menubar icon update: ferret pet and menu bar icon (good) or shrimp pet and menu bar icon (bad posture)
 6. After 5 consecutive bad snapshots → shows a notification and plays a random reminder clip if sound clips are enabled
 
+## SpineSpy Pro
+
+SpineSpy includes a 7-day free trial of Pro features. After your trial ends, you can purchase a SpineSpy Pro license to continue using advanced features (coming in future updates).
+
+### License Management
+
+- **Trial**: Starts automatically on first launch. Trial status persists in the secure macOS Keychain so it's not reset by reinstalling
+- **Activate**: Click **SpineSpy Pro → Enter License…** and paste your license key from Lemon Squeezy
+- **Move to another Mac**: Click **SpineSpy Pro → Deactivate this Mac** to free up an activation slot. Each license works on up to 3 Macs
+- **Offline grace period**: After activation, SpineSpy Pro validates your license every ~7 days. If you're offline, you can continue using Pro features for 7 days before revalidation is required
+
+Your license key and device ID are stored securely in the macOS Keychain, not in plain settings files.
+
 ## Configuration
 
 Your selected need, interval, setup completion, camera choice, sound, and calibration are saved locally in
-`~/Library/Application Support/SpineSpy/settings.json`. No settings are synced or
+`~/Library/Application Support/SpineSpy/settings.json`. License data is stored securely in the macOS Keychain. No settings are synced or
 uploaded. The selected need records your preference; it does not enable a separate
 movement or pain-treatment mode. Existing intervals shorter than 10 minutes move
 to 10 minutes on upgrade; other preferences and calibration are retained.
