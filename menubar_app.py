@@ -35,6 +35,18 @@ from spinespy.settings import (
     SettingsStore,
     is_valid_interval,
 )
+from spinespy.licensing import (
+    activate_license,
+    deactivate_license,
+    format_license_status,
+    get_license_info,
+    is_pro,
+    LicenseActivationError,
+    LicenseActivationLimitError,
+    LicenseError,
+    LicenseStatus,
+    CHECKOUT_URL,
+)
 
 try:
     from AppKit import (
@@ -45,6 +57,10 @@ try:
         NSAccessibilityPriorityKey,
         NSAccessibilityPriorityMedium,
         NSAccessibilityValueChangedNotification,
+        NSAlert,
+        NSAlertFirstButtonReturn,
+        NSAlertSecondButtonReturn,
+        NSAlertStyle,
         NSApplication,
         NSBackingStoreBuffered,
         NSColor,
@@ -68,10 +84,13 @@ try:
         NSWindowCollectionBehaviorStationary,
         NSWindowStyleMaskBorderless,
         NSWindowStyleMaskNonactivatingPanel,
+        NSURL,
+        NSWorkspace,
     )
     from UniformTypeIdentifiers import UTTypeJPEG, UTTypePNG
 except ImportError:
     NSPanel = None
+    NSAlert = None
 
 
 if NSPanel is not None:
@@ -784,12 +803,22 @@ class PostureGuardApp(rumps.App):
         self.settings_menu.add(self.sound_clips_item)
         self.settings_menu.add(rumps.MenuItem("Welcome to SpineSpy…", callback=self.show_welcome))
 
+        self.license_status_item = rumps.MenuItem(format_license_status())
+        self.license_menu = rumps.MenuItem("SpineSpy Pro")
+        self.license_menu.add(self.license_status_item)
+        self.license_menu.add(None)
+        self.license_menu.add(rumps.MenuItem("Enter License…", callback=self.enter_license))
+        self.license_menu.add(rumps.MenuItem("Buy SpineSpy Pro…", callback=self.buy_license))
+        self.license_menu.add(None)
+        self.license_menu.add(rumps.MenuItem("Deactivate this Mac", callback=self.deactivate_license))
+
         self.menu = [
             self.monitoring_item,
             self.next_capture_item,
             self.camera_status_item,
             self.interval_menu,
             self.settings_menu,
+            self.license_menu,
             None,
             rumps.MenuItem("Calibrate", callback=self.run_calibration),
             rumps.MenuItem("Save Snapshot", callback=self.save_snapshot),
@@ -806,6 +835,7 @@ class PostureGuardApp(rumps.App):
     def _start_session(self):
         self._session_started = True
         self.pet_panel.show()
+        self._update_license_status()
         self._start_monitoring_timer()
         if not self.has_saved_calibration:
             self._request_startup_calibration()
@@ -1247,6 +1277,9 @@ class PostureGuardApp(rumps.App):
             self.bad_reasons = []
             self.set_posture_state("good")
             print("Good posture")
+        
+        # Periodically update license status
+        self._update_license_status()
 
     def _choose_snapshot_path(self):
         application = NSApplication.sharedApplication()
@@ -1367,6 +1400,130 @@ class PostureGuardApp(rumps.App):
             time.localtime(self.next_capture_at),
         ).lstrip("0")
         self.next_capture_item.title = f"Next capture: {capture_time}"
+
+    def enter_license(self, _):
+        """Show dialog to enter and activate a license key."""
+        if NSAlert is None:
+            rumps.notification("SpineSpy", "License activation unavailable", 
+                             "AppKit is not available")
+            return
+        
+        application = NSApplication.sharedApplication()
+        application.activateIgnoringOtherApps_(True)
+        
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_("Enter SpineSpy Pro License Key")
+        alert.setInformativeText_("Enter your license key from Lemon Squeezy:")
+        alert.addButtonWithTitle_("Activate")
+        alert.addButtonWithTitle_("Cancel")
+        
+        text_field = NSTextField.alloc().initWithFrame_(NSMakeRect(0, 0, 300, 24))
+        text_field.setPlaceholderString_("XXXX-XXXX-XXXX-XXXX")
+        alert.setAccessoryView_(text_field)
+        
+        response = alert.runModal()
+        
+        if response == NSAlertFirstButtonReturn:
+            license_key = text_field.stringValue().strip()
+            if not license_key:
+                rumps.notification("SpineSpy", "No license key entered", 
+                                 "Please enter a valid license key.")
+                return
+            
+            # Activate in a background thread to avoid blocking UI
+            def activate():
+                try:
+                    info = activate_license(license_key)
+                    self._dispatch_main(self._license_activated, info)
+                except LicenseActivationLimitError as error:
+                    self._dispatch_main(self._license_activation_failed, str(error), True)
+                except LicenseActivationError as error:
+                    self._dispatch_main(self._license_activation_failed, str(error), False)
+            
+            threading.Thread(target=activate, daemon=True).start()
+            rumps.notification("SpineSpy Pro", "Activating license...", 
+                             "Please wait while we verify your license.")
+
+    def _license_activated(self, info):
+        """Handle successful license activation."""
+        self.license_status_item.title = format_license_status()
+        rumps.notification("SpineSpy Pro", "License activated!", 
+                         "Welcome to SpineSpy Pro.")
+
+    def _license_activation_failed(self, error_message, is_limit_error):
+        """Handle failed license activation."""
+        rumps.notification("SpineSpy Pro", "Activation failed", error_message)
+
+    def buy_license(self, _):
+        """Open the SpineSpy Pro checkout page."""
+        if NSWorkspace is not None:
+            workspace = NSWorkspace.sharedWorkspace()
+            url = NSURL.URLWithString_(CHECKOUT_URL)
+            workspace.openURL_(url)
+        else:
+            rumps.notification("SpineSpy Pro", "Purchase link", 
+                             f"Visit: {CHECKOUT_URL}")
+
+    def deactivate_license(self, _):
+        """Deactivate the license on this Mac."""
+        if NSAlert is None:
+            rumps.notification("SpineSpy", "Deactivation unavailable", 
+                             "AppKit is not available")
+            return
+        
+        # Check if there's a license to deactivate
+        try:
+            info = get_license_info()
+            if info.status not in (LicenseStatus.ACTIVE, LicenseStatus.INACTIVE, LicenseStatus.DISABLED):
+                rumps.notification("SpineSpy Pro", "No license to deactivate", 
+                                 "You don't have an active license on this Mac.")
+                return
+        except Exception:
+            rumps.notification("SpineSpy Pro", "No license to deactivate", 
+                             "You don't have an active license on this Mac.")
+            return
+        
+        application = NSApplication.sharedApplication()
+        application.activateIgnoringOtherApps_(True)
+        
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_("Deactivate SpineSpy Pro on this Mac?")
+        alert.setInformativeText_(
+            "This will free up one activation slot so you can use your license on another Mac. "
+            "You can reactivate this Mac later."
+        )
+        alert.addButtonWithTitle_("Deactivate")
+        alert.addButtonWithTitle_("Cancel")
+        alert.setAlertStyle_(NSAlertStyle.warning)
+        
+        response = alert.runModal()
+        
+        if response == NSAlertFirstButtonReturn:
+            def deactivate():
+                try:
+                    deactivate_license()
+                    self._dispatch_main(self._license_deactivated)
+                except LicenseError as error:
+                    self._dispatch_main(self._license_deactivation_failed, str(error))
+            
+            threading.Thread(target=deactivate, daemon=True).start()
+
+    def _license_deactivated(self):
+        """Handle successful license deactivation."""
+        self.license_status_item.title = format_license_status()
+        rumps.notification("SpineSpy Pro", "License deactivated", 
+                         "You can now activate this license on another Mac.")
+
+    def _license_deactivation_failed(self, error_message):
+        """Handle failed license deactivation."""
+        rumps.notification("SpineSpy Pro", "Deactivation failed", error_message)
+
+    def _update_license_status(self):
+        """Update the license status display."""
+        try:
+            self.license_status_item.title = format_license_status()
+        except Exception:
+            pass  # Fail silently
 
     def quit_app(self, _):
         self._is_quitting = True
